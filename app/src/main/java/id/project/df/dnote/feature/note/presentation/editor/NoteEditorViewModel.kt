@@ -41,7 +41,7 @@ class NoteEditorViewModel @Inject constructor(
     private fun scheduleAutosave() {
         autosaveJob?.cancel()
         autosaveJob = viewModelScope.launch {
-            delay(400) // debounce
+            delay(400)
             saveInternal(flush = false)
         }
     }
