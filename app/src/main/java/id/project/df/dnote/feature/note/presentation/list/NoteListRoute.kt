@@ -74,24 +74,46 @@ fun NotesListScreen(
 
     Scaffold(
         topBar = {
-            NotesTopBar(
-                query = uiState.query,
-                onQueryChange = onQueryChange
+            Text(
+                text = "Notes",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
             )
         }
     ) { padding ->
 
-        NotesListContent(
-            modifier = Modifier.padding(padding),
-            isLoading = uiState.isLoading,
-            errorMessage = uiState.errorMessage,
-            items = uiState.items,
-            onNoteClick = onNoteClick,
-            onDeleteClick = { noteId ->
-                pendingDeleteId = noteId
-            },
-            onRetry = onRetry
-        )
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+        ) {
+            OutlinedTextField(
+                value = uiState.query,
+                onValueChange = onQueryChange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                singleLine = true,
+                placeholder = { Text("Search notes...") },
+                leadingIcon = {
+                    Icon(Icons.Default.Search, contentDescription = null)
+                }
+            )
+
+            NotesListContent(
+                modifier = Modifier.weight(1f),
+                isLoading = uiState.isLoading,
+                errorMessage = uiState.errorMessage,
+                items = uiState.items,
+                onNoteClick = onNoteClick,
+                onDeleteClick = { noteId ->
+                    pendingDeleteId = noteId
+                },
+                onRetry = onRetry
+            )
+        }
 
         if (pendingDeleteId != null) {
             DeleteConfirmationDialog(

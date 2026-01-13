@@ -42,7 +42,7 @@ class NoteEditorViewModel @AssistedInject constructor(
             viewModelScope.launch(Dispatchers.IO) {
                 repo.getNote(navKey.id).collect { result ->
                     when (result) {
-                        is Result.Success -> loadExisting(navKey.id, result.data.content, null)
+                        is Result.Success -> loadExisting(navKey.id, result.data.title, result.data.content, null)
                         is Result.Error -> loadExisting(navKey.id,  errorMessage = result.exception.message.toString())
                     }
                 }
@@ -50,8 +50,8 @@ class NoteEditorViewModel @AssistedInject constructor(
         }
     }
 
-    fun loadExisting(noteId: String, initialText: String = "", errorMessage: String? = null) {
-        _uiState.value = NoteEditorUiState(noteId = noteId, contentText = initialText, errorMessage = errorMessage)
+    fun loadExisting(noteId: String, title: String = "", initialText: String = "", errorMessage: String? = null) {
+        _uiState.value = NoteEditorUiState(noteId = noteId, title = title, contentText = initialText, errorMessage = errorMessage)
     }
 
     fun onContentChanged(newText: String) {
@@ -86,7 +86,7 @@ class NoteEditorViewModel @AssistedInject constructor(
         _uiState.update { it.copy(isSaving = flush) }
 
         return runCatching {
-            upsertNote(current.noteId, "", current.contentText)
+            upsertNote(current.noteId, current.title, current.contentText)
         }.onSuccess { newIdOrNull ->
             if (current.noteId == null && newIdOrNull != null) {
                 _uiState.update { it.copy(noteId = newIdOrNull) }

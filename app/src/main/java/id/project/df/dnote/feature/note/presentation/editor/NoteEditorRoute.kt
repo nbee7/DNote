@@ -1,14 +1,11 @@
 package id.project.df.dnote.feature.note.presentation.editor
 
 import android.widget.Toast
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Save
@@ -18,6 +15,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,8 +25,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.project.df.dnote.core.ui.theme.DNoteTheme
@@ -77,53 +78,74 @@ fun EditorScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    BasicTextField(
+                    TextField(
                         value = uiState.title,
                         onValueChange = onTitleChange,
                         modifier = Modifier.fillMaxWidth(),
-                        textStyle = MaterialTheme.typography.headlineSmall.copy(color = Color.Black),
-                        cursorBrush = SolidColor(Color.Black)
+                        textStyle = MaterialTheme.typography.headlineSmall,
+                        placeholder = {
+                            Text(
+                                "Untitled Note",
+                                style = MaterialTheme.typography.headlineSmall
+                            )
+                        },
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                        ),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Sentences,
+                            imeAction = ImeAction.Next
+                        )
                     )
                 },
                 actions = {
-                    IconButton(onClick = onSaveNote) {
+                    IconButton(
+                        onClick = onSaveNote,
+                        enabled = !uiState.isSaving
+                    ) {
                         if (uiState.isSaving) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(24.dp),
-                                color = MaterialTheme.colorScheme.onSurface,
+                                strokeWidth = 2.dp
                             )
                         } else {
-                            Icon(imageVector = Icons.Default.Save, contentDescription = "Save")
+                            Icon(
+                                imageVector = Icons.Default.Save,
+                                contentDescription = "Save note"
+                            )
                         }
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onCloseEditor) {
-                        Icon(imageVector = Icons.Default.Close, contentDescription = "Close")
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close editor"
+                        )
                     }
                 }
             )
-        },
-        content = { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .padding(paddingValues)
-                    .fillMaxSize()
-                    .padding(16.dp)
-            ) {
-                BasicTextField(
-                    value = uiState.contentText,
-                    onValueChange = onContentChange,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .border(1.dp, Color.Gray, shape = RoundedCornerShape(8.dp))
-                        .padding(16.dp),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color.Black),
-                    cursorBrush = SolidColor(Color.Black)
-                )
-            }
         }
-    )
+    ) { paddingValues ->
+        TextField(
+            value = uiState.contentText,
+            onValueChange = onContentChange,
+            modifier = Modifier
+                .padding(paddingValues)
+                .fillMaxSize()
+                .padding(16.dp),
+            textStyle = MaterialTheme.typography.bodyMedium,
+            placeholder = { Text("Start writing your note...") },
+            colors = TextFieldDefaults.colors(
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+            )
+        )
+    }
 }
 
 @Preview(showBackground = true)
@@ -132,8 +154,8 @@ fun EditorScreenPreview() {
     DNoteTheme {
         EditorScreen(
             uiState = NoteEditorUiState(
-                title = "Note Title",
-                contentText = "This is the note content.",
+                title = "",
+                contentText = "",
                 isSaving = false,
                 errorMessage = null
             ),

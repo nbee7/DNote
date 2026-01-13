@@ -32,13 +32,19 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
         setContent {
             DNoteTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     NavDisplay(
                         backStack = navigator.backStack,
                         modifier = Modifier.padding(paddingValues = innerPadding),
-                        onBack = { navigator.goBack() },
+                        onBack = {
+                            val canGoBack = navigator.goBack()
+                            if (!canGoBack) {
+                                finish()
+                            }
+                        },
                         entryDecorators = listOf(
                             rememberSaveableStateHolderNavEntryDecorator(),
                             rememberViewModelStoreNavEntryDecorator()

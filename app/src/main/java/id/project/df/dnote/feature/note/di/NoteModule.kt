@@ -86,9 +86,12 @@ object UseCaseModule {
 
                 NoteListRoute(
                     viewModel = viewModel,
-                    onNoteClick = { noteId -> navigator.goTo(NoteEditor(noteId)) }
+                    onNoteClick = { noteId ->
+                        navigator.goTo(NoteEditor(noteId))
+                    }
                 )
             }
+
             entry<NoteEditor> { key ->
                 val viewModel = hiltViewModel<NoteEditorViewModel, NoteEditorViewModel.Factory>(
                     creationCallback = { factory ->
@@ -101,7 +104,9 @@ object UseCaseModule {
                 )
 
                 NoteEditorRoute(
-                    onCloseEditor = { navigator.goTo(NoteList) },
+                    onCloseEditor = {
+                        navigator.navigateToList()
+                    },
                     viewModel = viewModel
                 )
             }

@@ -98,9 +98,8 @@ class NotesListViewModel @AssistedInject constructor(
             .launchIn(viewModelScope)
     }
 
-
-
     fun onQueryChanged(q: String) {
+        _uiState.update { it.copy(query = q) }
         queryFlow.value = q
     }
 
