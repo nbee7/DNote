@@ -1,4 +1,4 @@
-package id.project.df.dnote.ui.theme
+package id.project.df.dnote.core.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

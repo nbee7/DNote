@@ -6,13 +6,13 @@ import javax.inject.Inject
 class UpsertNoteUseCase @Inject constructor(
     private val repo: NoteRepositoryInterface
 ) {
-    suspend operator fun invoke(noteId: String?, rawContent: String): String? {
+    suspend operator fun invoke(noteId: String?, title: String,  rawContent: String): String? {
         val content = rawContent.trim()
 
         if (noteId == null && content.isEmpty()) return null
 
         return if (noteId == null) {
-            repo.create(content)
+            repo.create(title, content)
         } else {
             repo.update(noteId, content)
             noteId

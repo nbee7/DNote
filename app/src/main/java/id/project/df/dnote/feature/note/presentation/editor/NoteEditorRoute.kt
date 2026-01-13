@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,7 +18,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,10 +29,13 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import id.project.df.dnote.ui.theme.DNoteTheme
+import id.project.df.dnote.core.ui.theme.DNoteTheme
 
 @Composable
-fun NoteEditorScreen(viewModel: NoteEditorViewModel) {
+fun NoteEditorRoute(
+    onCloseEditor: () -> Unit,
+    viewModel: NoteEditorViewModel
+) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
@@ -51,9 +54,13 @@ fun NoteEditorScreen(viewModel: NoteEditorViewModel) {
 
     EditorScreen(
         uiState = uiState,
-        onTextChange = { newText -> viewModel.onTextChanged(newText) },
+        onTitleChange = { newText -> viewModel.onTitleChanged(newText) },
+        onContentChange = { newText -> viewModel.onContentChanged(newText) },
         onSaveNote = { viewModel.onCloseRequested() },
-        onCloseEditor = { viewModel.onCloseRequested() }
+        onCloseEditor = {
+            viewModel.onCloseRequested()
+            onCloseEditor.invoke()
+        }
     )
 }
 
@@ -61,14 +68,23 @@ fun NoteEditorScreen(viewModel: NoteEditorViewModel) {
 @Composable
 fun EditorScreen(
     uiState: NoteEditorUiState,
-    onTextChange: (String) -> Unit,
+    onTitleChange: (String) -> Unit,
+    onContentChange: (String) -> Unit,
     onSaveNote: () -> Unit,
     onCloseEditor: () -> Unit
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(text = "Note Editor") },
+                title = {
+                    BasicTextField(
+                        value = uiState.title,
+                        onValueChange = onTitleChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = MaterialTheme.typography.headlineSmall.copy(color = Color.Black),
+                        cursorBrush = SolidColor(Color.Black)
+                    )
+                },
                 actions = {
                     IconButton(onClick = onSaveNote) {
                         if (uiState.isSaving) {
@@ -96,8 +112,8 @@ fun EditorScreen(
                     .padding(16.dp)
             ) {
                 BasicTextField(
-                    value = uiState.text,
-                    onValueChange = onTextChange,
+                    value = uiState.contentText,
+                    onValueChange = onContentChange,
                     modifier = Modifier
                         .fillMaxSize()
                         .border(1.dp, Color.Gray, shape = RoundedCornerShape(8.dp))
@@ -116,13 +132,15 @@ fun EditorScreenPreview() {
     DNoteTheme {
         EditorScreen(
             uiState = NoteEditorUiState(
-                text = "This is the note content.",
+                title = "Note Title",
+                contentText = "This is the note content.",
                 isSaving = false,
                 errorMessage = null
             ),
-            onTextChange = {},
+            onContentChange = {},
             onSaveNote = {},
-            onCloseEditor = {}
+            onCloseEditor = {},
+            onTitleChange = {}
         )
     }
 }

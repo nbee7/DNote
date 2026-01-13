@@ -11,18 +11,41 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import id.project.df.dnote.ui.theme.DNoteTheme
+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
+import androidx.navigation3.ui.NavDisplay
+import dagger.hilt.android.AndroidEntryPoint
+import id.project.df.dnote.core.ui.navigation.EntryProviderInstaller
+import id.project.df.dnote.core.ui.navigation.Navigator
+import id.project.df.dnote.core.ui.theme.DNoteTheme
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Inject
+    lateinit var navigator: Navigator
+
+    @Inject
+    lateinit var entryProviderScopes: Set<@JvmSuppressWildcards EntryProviderInstaller>
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             DNoteTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
+                    NavDisplay(
+                        backStack = navigator.backStack,
+                        modifier = Modifier.padding(paddingValues = innerPadding),
+                        onBack = { navigator.goBack() },
+                        entryDecorators = listOf(
+                            rememberSaveableStateHolderNavEntryDecorator(),
+                            rememberViewModelStoreNavEntryDecorator()
+                        ),
+                        entryProvider = entryProvider {
+                            entryProviderScopes.forEach { builder -> this.builder() }
+                        }
                     )
                 }
             }

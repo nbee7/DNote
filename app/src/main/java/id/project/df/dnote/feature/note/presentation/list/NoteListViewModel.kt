@@ -2,6 +2,9 @@ package id.project.df.dnote.feature.note.presentation.list
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import id.project.df.dnote.feature.note.domain.usecase.DeleteNoteUseCase
 import id.project.df.dnote.feature.note.domain.usecase.ObserveNotesUseCase
@@ -21,13 +24,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import javax.inject.Inject
+import id.project.df.dnote.feature.note.data.repository.Result
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
-@HiltViewModel
-class NotesListViewModel @Inject constructor(
-    private val observeNotes: ObserveNotesUseCase,
-    private val deleteNote: DeleteNoteUseCase
+@HiltViewModel(assistedFactory = NotesListViewModel.Factory::class)
+class NotesListViewModel @AssistedInject constructor(
+    @Assisted private val observeNotes: ObserveNotesUseCase,
+    @Assisted private val deleteNote: DeleteNoteUseCase
 ) : ViewModel() {
 
     private val queryFlow = MutableStateFlow("")
@@ -44,23 +47,31 @@ class NotesListViewModel @Inject constructor(
                     emit(NotesListPartial.Loading(q))
 
                     emitAll(
-                        observeNotes(q).map { notes ->
-                            NotesListPartial.Data(
-                                q = q,
-                                items = notes.map {
-                                    NoteListItemUI(
-                                        id = it.id,
-                                        preview = it.toPreview(),
-                                        updatedAt = it.updatedAt
+                        observeNotes(q).map { result ->
+                            when (result) {
+                                is Result.Success -> {
+                                    NotesListPartial.Data(
+                                        q = q,
+                                        items = result.data.map {
+                                            NoteListItemUI(
+                                                id = it.id,
+                                                title = it.title,
+                                                preview = it.toPreview(),
+                                                updatedAt = it.updatedAt
+                                            )
+                                        }
                                     )
                                 }
-                            )
+                                is Result.Error -> {
+                                    NotesListPartial.Error(q, result.exception.message ?: "Error")
+                                }
+                            }
                         }
                     )
                 }
-                    .catch { t ->
-                        emit(NotesListPartial.Error(q, t.message ?: "Error"))
-                    }
+            }
+            .catch { t ->
+                emit(NotesListPartial.Error(queryFlow.value, t.message ?: "Unknown Error"))
             }
             .onEach { partial ->
                 _uiState.update { current ->
@@ -87,6 +98,8 @@ class NotesListViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
 
+
+
     fun onQueryChanged(q: String) {
         queryFlow.value = q
     }
@@ -99,5 +112,13 @@ class NotesListViewModel @Inject constructor(
         data class Loading(val q: String) : NotesListPartial
         data class Data(val q: String, val items: List<NoteListItemUI>) : NotesListPartial
         data class Error(val q: String, val message: String) : NotesListPartial
+    }
+
+    @AssistedFactory
+    interface Factory {
+        fun create(
+            observeNotes: ObserveNotesUseCase,
+            deleteNote: DeleteNoteUseCase
+        ): NotesListViewModel
     }
 }

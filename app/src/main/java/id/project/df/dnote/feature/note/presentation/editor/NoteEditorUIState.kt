@@ -2,7 +2,8 @@ package id.project.df.dnote.feature.note.presentation.editor
 
 data class NoteEditorUiState(
     val noteId: String? = null,
-    val text: String = "",
+    val title: String = "",
+    val contentText: String = "",
     val isSaving: Boolean = false,
     val errorMessage: String? = null
 )
