@@ -88,6 +88,9 @@ object UseCaseModule {
                     viewModel = viewModel,
                     onNoteClick = { noteId ->
                         navigator.goTo(NoteEditor(noteId))
+                    },
+                    onCreateNew = {
+                        navigator.goTo(NoteEditor(null))
                     }
                 )
             }

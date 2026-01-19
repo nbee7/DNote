@@ -12,11 +12,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +46,7 @@ import id.project.df.dnote.core.common.util.formatDate
 fun NoteListRoute(
     viewModel: NotesListViewModel,
     onNoteClick: (noteId: String) -> Unit,
+    onCreateNew: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -50,6 +54,7 @@ fun NoteListRoute(
         uiState = uiState,
         onQueryChange = viewModel::onQueryChanged,
         onNoteClick = onNoteClick,
+        onCreateNew = onCreateNew,
         onDeleteClick = viewModel::onDeleteClicked,
         onRetry = { viewModel.onQueryChanged(uiState.query) }
     )
@@ -60,6 +65,7 @@ fun NotesListScreen(
     uiState: NotesListUiState,
     onQueryChange: (String) -> Unit,
     onNoteClick: (String) -> Unit,
+    onCreateNew: () -> Unit,
     onDeleteClick: (String) -> Unit,
     onRetry: () -> Unit,
 ) {
@@ -113,6 +119,27 @@ fun NotesListScreen(
                 },
                 onRetry = onRetry
             )
+
+            FloatingActionButton(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .align(Alignment.End),
+                onClick = {
+                    onCreateNew.invoke()
+                },
+                shape = MaterialTheme.shapes.medium,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                elevation = FloatingActionButtonDefaults.elevation(
+                    defaultElevation = 6.dp,
+                    pressedElevation = 8.dp
+                )
+            ) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = "add new note"
+                )
+            }
         }
 
         if (pendingDeleteId != null) {
@@ -240,14 +267,14 @@ private fun NoteRow(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = item.title?.ifBlank { "(Untitled)" } ?: "(Untitled)",
+                    text = item.title.ifBlank { "(Untitled)" },
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = item.preview ?: "",
+                    text = item.preview,
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -329,6 +356,7 @@ fun NotesListScreenPreview_Positive() {
             ),
             onQueryChange = {},
             onNoteClick = {},
+            onCreateNew = {},
             onDeleteClick = {},
             onRetry = {}
         )
@@ -348,6 +376,7 @@ fun NotesListScreenPreview_Loading() {
             ),
             onQueryChange = {},
             onNoteClick = {},
+            onCreateNew = {},
             onDeleteClick = {},
             onRetry = {}
         )
@@ -367,6 +396,7 @@ fun NotesListScreenPreview_Error() {
             ),
             onQueryChange = {},
             onNoteClick = {},
+            onCreateNew = {},
             onDeleteClick = {},
             onRetry = {}
         )
@@ -386,6 +416,7 @@ fun NotesListScreenPreview_Empty() {
             ),
             onQueryChange = {},
             onNoteClick = {},
+            onCreateNew = {},
             onDeleteClick = {},
             onRetry = {}
         )
