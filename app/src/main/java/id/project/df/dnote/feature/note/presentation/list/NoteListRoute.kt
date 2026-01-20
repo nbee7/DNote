@@ -1,5 +1,7 @@
 package id.project.df.dnote.feature.note.presentation.list
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -9,19 +11,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -36,9 +36,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import id.project.df.dnote.core.common.util.formatDate
 
@@ -87,13 +90,24 @@ fun NotesListScreen(
                     .fillMaxWidth()
                     .padding(16.dp)
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = onCreateNew,
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = "Add new note"
+                )
+            }
         }
-    ) { padding ->
+    ) { paddingValues ->
 
         Column(
             modifier = Modifier
-                .padding(padding)
                 .fillMaxSize()
+                .padding(paddingValues)
         ) {
             OutlinedTextField(
                 value = uiState.query,
@@ -109,7 +123,7 @@ fun NotesListScreen(
             )
 
             NotesListContent(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxSize(),
                 isLoading = uiState.isLoading,
                 errorMessage = uiState.errorMessage,
                 items = uiState.items,
@@ -119,27 +133,6 @@ fun NotesListScreen(
                 },
                 onRetry = onRetry
             )
-
-            FloatingActionButton(
-                modifier = Modifier
-                    .padding(16.dp)
-                    .align(Alignment.End),
-                onClick = {
-                    onCreateNew.invoke()
-                },
-                shape = MaterialTheme.shapes.medium,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                elevation = FloatingActionButtonDefaults.elevation(
-                    defaultElevation = 6.dp,
-                    pressedElevation = 8.dp
-                )
-            ) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = "add new note"
-                )
-            }
         }
 
         if (pendingDeleteId != null) {
@@ -159,33 +152,6 @@ fun NotesListScreen(
 
 
 @Composable
-private fun NotesTopBar(
-    query: String,
-    onQueryChange: (String) -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
-    ) {
-        Text(
-            text = "Notes",
-            style = MaterialTheme.typography.titleLarge
-        )
-        Spacer(Modifier.height(12.dp))
-
-        OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text("Search") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
-        )
-    }
-}
-
-@Composable
 private fun NotesListContent(
     modifier: Modifier = Modifier,
     isLoading: Boolean,
@@ -195,7 +161,7 @@ private fun NotesListContent(
     onDeleteClick: (String) -> Unit,
     onRetry: () -> Unit,
 ) {
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier) {
         when {
             isLoading -> {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
@@ -208,7 +174,7 @@ private fun NotesListContent(
                         .padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(text = errorMessage, style = MaterialTheme.typography.bodyMedium)
+                    Text(text = errorMessage)
                     Spacer(Modifier.height(12.dp))
                     Button(onClick = onRetry) { Text("Retry") }
                 }
@@ -217,15 +183,17 @@ private fun NotesListContent(
             items.isEmpty() -> {
                 Text(
                     text = "No notes found",
-                    modifier = Modifier.align(Alignment.Center),
-                    style = MaterialTheme.typography.bodyMedium
+                    modifier = Modifier.align(Alignment.Center)
                 )
             }
 
             else -> {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(vertical = 8.dp)
+                    contentPadding = PaddingValues(
+                        top = 8.dp,
+                        bottom = 88.dp
+                    )
                 ) {
                     items(
                         items = items,
@@ -243,59 +211,120 @@ private fun NotesListContent(
     }
 }
 
+
 @Composable
 private fun NoteRow(
     item: NoteListItemUI,
     onClick: () -> Unit,
     onDeleteClick: () -> Unit,
 ) {
-    val updatedText = remember(item.updatedAt) { item.updatedAt?.formatDate() }
+    val updatedText = remember(item.updatedAt) {
+        item.updatedAt.formatDate()
+    }
+
+    var showContextMenu by remember { mutableStateOf(false) }
+    var touchPosition by remember { mutableStateOf(IntOffset.Zero) }
 
     Surface(
-        onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { onClick() },
+                    onLongPress = { offset ->
+                        touchPosition = IntOffset(
+                            x = offset.x.toInt(),
+                            y = offset.y.toInt()
+                        )
+                        showContextMenu = true
+                    }
+                )
+            },
         tonalElevation = 1.dp,
         shape = MaterialTheme.shapes.medium
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.title.ifBlank { "(Untitled)" },
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = item.preview,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "Updated: $updatedText",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = item.title.ifBlank { "(Untitled)" },
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = item.preview,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Updated: $updatedText",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
-            IconButton(onClick = onDeleteClick) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Delete"
-                )
+            if (showContextMenu) {
+                Popup(
+                    alignment = Alignment.TopStart,
+                    offset = touchPosition,
+                    onDismissRequest = { showContextMenu = false }
+                ) {
+                    Surface(
+                        modifier = Modifier.width(200.dp),
+                        shape = MaterialTheme.shapes.medium,
+                        tonalElevation = 8.dp,
+                        shadowElevation = 8.dp
+                    ) {
+                        Column {
+                            ContextMenuItem(
+                                text = "action 1",
+                                onClick = {
+                                    showContextMenu = false
+                                }
+                            )
+                            ContextMenuItem(
+                                text = "Delete",
+                                onClick = {
+                                    showContextMenu = false
+                                    onDeleteClick()
+                                }
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
+
+@Composable
+private fun ContextMenuItem(
+    text: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = text)
+    }
+}
+
+
 
 @Composable
 private fun DeleteConfirmationDialog(
