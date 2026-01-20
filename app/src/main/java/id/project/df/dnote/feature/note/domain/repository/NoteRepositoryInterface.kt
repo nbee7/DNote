@@ -8,5 +8,5 @@ interface NoteRepositoryInterface {
     fun observeNotes(query: String): Flow<Result<List<Note>>>
     fun getNote(id: String): Flow<Result<Note>>
     suspend fun create(title: String, content: String): String
-    suspend fun update(id: String, content: String)
+    suspend fun update(id: String, title: String, content: String)
     suspend fun delete(id: String)}

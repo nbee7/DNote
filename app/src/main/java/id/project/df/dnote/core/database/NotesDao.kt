@@ -32,12 +32,14 @@ interface NotesDao {
 
     @Query("""
         UPDATE notes
-        SET content = :content,
+        SET 
+            title = :title,
+            content = :content,
             updatedAt = :updatedAt
         WHERE id = :id
           AND deletedAt IS NULL
     """)
-    suspend fun updateContent(id: String, content: String, updatedAt: Long): Int
+    suspend fun updateContent(id: String, title: String, content: String, updatedAt: Long): Int
 
     @Query("""
         UPDATE notes

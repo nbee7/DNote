@@ -14,7 +14,7 @@ class UpsertNoteUseCase @Inject constructor(
         return if (noteId == null) {
             repo.create(title, content)
         } else {
-            repo.update(noteId, content)
+            repo.update(noteId, title, content)
             noteId
         }
     }

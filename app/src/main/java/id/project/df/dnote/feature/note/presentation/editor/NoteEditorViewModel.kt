@@ -21,6 +21,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 @HiltViewModel(assistedFactory = NoteEditorViewModel.Factory::class)
 class NoteEditorViewModel @AssistedInject constructor(
@@ -36,6 +38,8 @@ class NoteEditorViewModel @AssistedInject constructor(
     val events: Flow<NoteEditorEvent> = _events.receiveAsFlow()
 
     private var autosaveJob: Job? = null
+
+    private val saveMutex = Mutex()
 
     init {
         if (navKey.id != null) {
@@ -80,23 +84,33 @@ class NoteEditorViewModel @AssistedInject constructor(
         }
     }
 
-    private suspend fun saveInternal(flush: Boolean): Boolean {
-        val current = _uiState.value
+    private suspend fun saveInternal(flush: Boolean): Boolean =
+        saveMutex.withLock {
+            _uiState.update { it.copy(isSaving = flush) }
 
-        _uiState.update { it.copy(isSaving = flush) }
+            runCatching {
+                val latest = _uiState.value
+                upsertNote(
+                    latest.noteId,
+                    latest.title,
+                    latest.contentText
+                )
+            }.onSuccess { newIdOrNull ->
+                if (_uiState.value.noteId == null && newIdOrNull != null) {
+                    _uiState.update { it.copy(noteId = newIdOrNull) }
+                }
+                _uiState.update { it.copy(isSaving = false) }
+            }.onFailure { t ->
+                _uiState.update {
+                    it.copy(
+                        isSaving = false,
+                        errorMessage = t.message ?: "Error"
+                    )
+                }
+                _events.send(NoteEditorEvent.ShowError(t.message ?: "Error"))
+            }.isSuccess
+        }
 
-        return runCatching {
-            upsertNote(current.noteId, current.title, current.contentText)
-        }.onSuccess { newIdOrNull ->
-            if (current.noteId == null && newIdOrNull != null) {
-                _uiState.update { it.copy(noteId = newIdOrNull) }
-            }
-            _uiState.update { it.copy(isSaving = false) }
-        }.onFailure { t ->
-            _uiState.update { it.copy(isSaving = false, errorMessage = t.message ?: "Error") }
-            _events.send(NoteEditorEvent.ShowError(t.message ?: "Error"))
-        }.isSuccess
-    }
 
     @AssistedFactory
     interface Factory {

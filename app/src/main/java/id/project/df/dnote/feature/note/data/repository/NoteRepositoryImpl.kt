@@ -63,8 +63,8 @@ class NotesRepositoryImpl @Inject constructor(
         return id
     }
 
-    override suspend fun update(id: String, content: String) {
-        dao.updateContent(id = id, content = content, updatedAt = timeProvider.nowMillis())
+    override suspend fun update(id: String, title: String, content: String) {
+        dao.updateContent(id = id, title = title, content = content, updatedAt = timeProvider.nowMillis())
     }
 
     override suspend fun delete(id: String) {
