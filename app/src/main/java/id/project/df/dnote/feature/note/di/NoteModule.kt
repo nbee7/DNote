@@ -101,6 +101,7 @@ object UseCaseModule {
                         factory.create(
                             navKey = key,
                             upsertNote = upsertNoteUseCase,
+                            deleteNote = deleteNoteUseCase,
                             repo = repo
                         )
                     }

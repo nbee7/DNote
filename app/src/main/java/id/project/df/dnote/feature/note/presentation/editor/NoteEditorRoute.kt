@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.CircularProgressIndicator
@@ -61,7 +63,9 @@ fun NoteEditorRoute(
         onCloseEditor = {
             viewModel.onCloseRequested()
             onCloseEditor.invoke()
-        }
+        },
+        onUndo = { viewModel.onUndo() },
+        onRedo = { viewModel.onRedo() }
     )
 }
 
@@ -72,7 +76,9 @@ fun EditorScreen(
     onTitleChange: (String) -> Unit,
     onContentChange: (String) -> Unit,
     onSaveNote: () -> Unit,
-    onCloseEditor: () -> Unit
+    onCloseEditor: () -> Unit,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -103,6 +109,26 @@ fun EditorScreen(
                     )
                 },
                 actions = {
+                    IconButton(
+                        onClick = onUndo,
+                        enabled = uiState.canUndo
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Undo,
+                            contentDescription = "Undo",
+                            tint = if (uiState.canUndo) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f)
+                        )
+                    }
+                    IconButton(
+                        onClick = onRedo,
+                        enabled = uiState.canRedo
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Redo,
+                            contentDescription = "Redo",
+                            tint = if (uiState.canRedo) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f)
+                        )
+                    }
                     IconButton(
                         onClick = onSaveNote,
                         enabled = !uiState.isSaving
@@ -162,7 +188,10 @@ fun EditorScreenPreview() {
             onContentChange = {},
             onSaveNote = {},
             onCloseEditor = {},
-            onTitleChange = {}
+            onTitleChange = {},
+            onUndo = {},
+            onRedo = {}
         )
     }
 }
+

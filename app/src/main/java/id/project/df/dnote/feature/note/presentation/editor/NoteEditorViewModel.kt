@@ -10,7 +10,7 @@ import id.project.df.dnote.feature.note.data.repository.Result
 import id.project.df.dnote.feature.note.di.NoteEditor
 import id.project.df.dnote.feature.note.domain.repository.NoteRepositoryInterface
 import id.project.df.dnote.feature.note.domain.usecase.UpsertNoteUseCase
-import kotlinx.coroutines.Dispatchers
+import id.project.df.dnote.feature.note.domain.usecase.DeleteNoteUseCase
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -23,11 +23,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.ArrayDeque
 
 @HiltViewModel(assistedFactory = NoteEditorViewModel.Factory::class)
 class NoteEditorViewModel @AssistedInject constructor(
     @Assisted private val navKey: NoteEditor,
     @Assisted private val upsertNote: UpsertNoteUseCase,
+    @Assisted private val deleteNote: DeleteNoteUseCase,
     @Assisted private val repo: NoteRepositoryInterface
 ) : ViewModel() {
 
@@ -38,12 +40,18 @@ class NoteEditorViewModel @AssistedInject constructor(
     val events: Flow<NoteEditorEvent> = _events.receiveAsFlow()
 
     private var autosaveJob: Job? = null
+    private var undoDebounceJob: Job? = null
 
     private val saveMutex = Mutex()
 
+    private data class EditorSnapshot(val title: String, val content: String)
+    private val undoStack = ArrayDeque<EditorSnapshot>()
+    private val redoStack = ArrayDeque<EditorSnapshot>()
+    private var lastStableState = EditorSnapshot("", "")
+
     init {
         if (navKey.id != null) {
-            viewModelScope.launch(Dispatchers.IO) {
+            viewModelScope.launch {
                 repo.getNote(navKey.id).collect { result ->
                     when (result) {
                         is Result.Success -> loadExisting(navKey.id, result.data.title, result.data.content, null)
@@ -55,17 +63,118 @@ class NoteEditorViewModel @AssistedInject constructor(
     }
 
     fun loadExisting(noteId: String, title: String = "", initialText: String = "", errorMessage: String? = null) {
-        _uiState.value = NoteEditorUiState(noteId = noteId, title = title, contentText = initialText, errorMessage = errorMessage)
+        _uiState.value = NoteEditorUiState(
+            noteId = noteId, 
+            title = title, 
+            contentText = initialText, 
+            errorMessage = errorMessage
+        )
+        undoStack.clear()
+        redoStack.clear()
+        lastStableState = EditorSnapshot(title, initialText)
+        updateUndoRedoState()
     }
 
     fun onContentChanged(newText: String) {
-        _uiState.update { it.copy(contentText = newText, errorMessage = null) }
+        if (redoStack.isNotEmpty()) {
+            redoStack.clear()
+        }
+        _uiState.update { 
+            val updated = it.copy(contentText = newText, errorMessage = null)
+            val currentState = EditorSnapshot(updated.title, updated.contentText)
+            val hasPending = currentState != lastStableState
+            updated.copy(
+                canUndo = undoStack.isNotEmpty() || hasPending,
+                canRedo = redoStack.isNotEmpty()
+            )
+        }
         scheduleAutosave()
+        scheduleUndoSnapshot()
     }
 
     fun onTitleChanged(newText: String) {
-        _uiState.update { it.copy(title = newText, errorMessage = null) }
+        if (redoStack.isNotEmpty()) {
+            redoStack.clear()
+        }
+        _uiState.update { 
+            val updated = it.copy(title = newText, errorMessage = null)
+            val currentState = EditorSnapshot(updated.title, updated.contentText)
+            val hasPending = currentState != lastStableState
+            updated.copy(
+                canUndo = undoStack.isNotEmpty() || hasPending,
+                canRedo = redoStack.isNotEmpty()
+            )
+        }
         scheduleAutosave()
+        scheduleUndoSnapshot()
+    }
+    
+    fun onUndo() {
+        undoDebounceJob?.cancel()
+        val currentUi = _uiState.value
+        val currentState = EditorSnapshot(currentUi.title, currentUi.contentText)
+
+        if (currentState != lastStableState) {
+            redoStack.addLast(currentState)
+            applySnapshot(lastStableState)
+            return
+        }
+
+        if (undoStack.isNotEmpty()) {
+            val prev = undoStack.removeLast()
+            redoStack.addLast(lastStableState)
+            lastStableState = prev
+            applySnapshot(prev)
+        }
+    }
+
+    fun onRedo() {
+        undoDebounceJob?.cancel()
+        if (redoStack.isNotEmpty()) {
+            val next = redoStack.removeLast()
+            undoStack.addLast(lastStableState)
+            lastStableState = next
+            applySnapshot(next)
+        }
+    }
+
+    private fun applySnapshot(snapshot: EditorSnapshot) {
+        _uiState.update { 
+            it.copy(title = snapshot.title, contentText = snapshot.content) 
+        }
+        updateUndoRedoState()
+        scheduleAutosave()
+    }
+
+    private fun scheduleUndoSnapshot() {
+        undoDebounceJob?.cancel()
+        undoDebounceJob = viewModelScope.launch {
+            delay(600)
+            commitToUndoStack()
+        }
+    }
+
+    private fun commitToUndoStack() {
+        val currentUi = _uiState.value
+        val currentState = EditorSnapshot(currentUi.title, currentUi.contentText)
+        if (currentState != lastStableState) {
+            undoStack.addLast(lastStableState)
+            lastStableState = currentState
+            updateUndoRedoState()
+        }
+    }
+
+    private fun updateUndoRedoState() {
+        val currentUi = _uiState.value
+        val currentState = EditorSnapshot(currentUi.title, currentUi.contentText)
+        val hasPending = currentState != lastStableState
+        
+        _uiState.update { 
+            it.copy(
+                canUndo = undoStack.isNotEmpty() || hasPending,
+                canRedo = redoStack.isNotEmpty()
+            ) 
+        }
     }
 
     private fun scheduleAutosave() {
@@ -90,11 +199,18 @@ class NoteEditorViewModel @AssistedInject constructor(
 
             runCatching {
                 val latest = _uiState.value
-                upsertNote(
-                    latest.noteId,
-                    latest.title,
-                    latest.contentText
-                )
+                if (latest.title.isBlank() && latest.contentText.isBlank()) {
+                     if (latest.noteId != null) {
+                         deleteNote(latest.noteId)
+                     }
+                     null
+                } else {
+                    upsertNote(
+                        latest.noteId,
+                        latest.title,
+                        latest.contentText
+                    )
+                }
             }.onSuccess { newIdOrNull ->
                 if (_uiState.value.noteId == null && newIdOrNull != null) {
                     _uiState.update { it.copy(noteId = newIdOrNull) }
@@ -117,6 +233,7 @@ class NoteEditorViewModel @AssistedInject constructor(
         fun create(
             navKey: NoteEditor,
             upsertNote: UpsertNoteUseCase,
+            deleteNote: DeleteNoteUseCase,
             repo: NoteRepositoryInterface
         ) : NoteEditorViewModel
     }

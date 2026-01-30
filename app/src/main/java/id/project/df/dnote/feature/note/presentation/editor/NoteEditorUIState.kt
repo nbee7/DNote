@@ -5,7 +5,9 @@ data class NoteEditorUiState(
     val title: String = "",
     val contentText: String = "",
     val isSaving: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val canUndo: Boolean = false,
+    val canRedo: Boolean = false
 )
 
 sealed interface NoteEditorEvent {
