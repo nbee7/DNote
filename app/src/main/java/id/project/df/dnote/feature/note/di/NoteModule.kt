@@ -108,9 +108,6 @@ object UseCaseModule {
                 )
 
                 NoteEditorRoute(
-                    onCloseEditor = {
-                        navigator.navigateToList()
-                    },
                     viewModel = viewModel
                 )
             }
