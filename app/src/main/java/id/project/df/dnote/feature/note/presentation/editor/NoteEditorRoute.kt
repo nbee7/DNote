@@ -5,13 +5,20 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -21,9 +28,12 @@ import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.automirrored.outlined.Help
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.FormatBold
+import androidx.compose.material.icons.filled.FormatItalic
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Title
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
@@ -62,6 +72,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.project.df.dnote.R
+import id.project.df.dnote.core.ui.markdown.MarkdownFormatter
 import id.project.df.dnote.core.ui.markdown.MarkdownVisualTransformation
 import id.project.df.dnote.core.ui.markdown.rules.BoldRule
 import id.project.df.dnote.core.ui.markdown.rules.HeaderRule
@@ -131,6 +142,9 @@ fun EditorScreen(
         )
     }
 
+    val markdownFormatter = remember { MarkdownFormatter() }
+    @OptIn(ExperimentalLayoutApi::class)
+    val isKeyboardVisible = WindowInsets.isImeVisible
 
     ModalNavigationDrawer(
         drawerContent = {
@@ -162,7 +176,7 @@ fun EditorScreen(
                         label = { Text("Settings") },
                         selected = false,
                         icon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
-                        badge = { Text("20") }, // Placeholder
+                        badge = { Text("20") },
                         onClick = { /* Handle click */ }
                     )
                     NavigationDrawerItem(
@@ -201,6 +215,7 @@ fun EditorScreen(
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(
                                 capitalization = KeyboardCapitalization.Sentences,
+                                autoCorrect = false,
                                 imeAction = ImeAction.Next
                             )
                         )
@@ -262,12 +277,44 @@ fun EditorScreen(
                 )
             },
             bottomBar = {
-                BrowserBottomBar(
-                    onSearch = {},
-                    onNewTab = {},
-                    onTabsClick = {},
-                    onMenuClick = {}
-                )
+                if (isKeyboardVisible) {
+                    Column {
+                        KeyboardAccessoryBar(
+                            onBoldClick = {
+                                val newValue =
+                                    markdownFormatter.toggleStyle(textFieldValueState.value, BoldRule())
+                                textFieldValueState.value = newValue
+                                onContentChange(newValue)
+                            },
+                            onItalicClick = {
+                                val newValue = markdownFormatter.toggleStyle(
+                                    textFieldValueState.value,
+                                    ItalicRule()
+                                )
+                                textFieldValueState.value = newValue
+                                onContentChange(newValue)
+                            },
+                            onHeaderClick = {
+                                val newValue = markdownFormatter.toggleCyclicHeading(
+                                    textFieldValueState.value,
+                                    HeaderRule()
+                                )
+                                textFieldValueState.value = newValue
+                                onContentChange(newValue)
+                            }
+                        )
+                        Spacer(modifier = Modifier.windowInsetsBottomHeight(
+                            WindowInsets.ime.exclude(WindowInsets.navigationBars)
+                        ))
+                    }
+                } else {
+                    BrowserBottomBar(
+                        onSearch = {},
+                        onNewTab = {},
+                        onTabsClick = {},
+                        onMenuClick = {}
+                    )
+                }
             }
         ) { paddingValues ->
             TextField(
@@ -344,6 +391,51 @@ fun EditorScreenPreview() {
             onTitleChange = {},
             onUndo = {},
             onRedo = {}
+        )
+    }
+}
+
+@Composable
+fun KeyboardAccessoryBar(
+    onBoldClick: () -> Unit,
+    onItalicClick: () -> Unit,
+    onHeaderClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        tonalElevation = 3.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBoldClick) {
+                Icon(Icons.Default.FormatBold, contentDescription = "Bold")
+            }
+            IconButton(onClick = onItalicClick) {
+                Icon(Icons.Default.FormatItalic, contentDescription = "Italic")
+            }
+            IconButton(onClick = onHeaderClick) {
+                Icon(Icons.Default.Title, contentDescription = "Heading")
+            }
+            Spacer(modifier = Modifier.weight(1f))
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun KeyboardAccessoryBarPreview() {
+    DNoteTheme {
+        KeyboardAccessoryBar(
+            onBoldClick = {},
+            onItalicClick = {},
+            onHeaderClick = {}
         )
     }
 }

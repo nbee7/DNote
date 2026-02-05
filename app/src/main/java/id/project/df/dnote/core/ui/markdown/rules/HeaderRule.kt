@@ -7,6 +7,7 @@ import id.project.df.dnote.core.ui.markdown.MarkdownRule
 
 class HeaderRule : MarkdownRule {
     override val pattern: Regex = Regex("^(#{1,6})\\s+(.*)$", RegexOption.MULTILINE)
+    override val insertionSymbol: String = "# "
 
     override fun getStyle(matchResult: MatchResult): SpanStyle {
         val hashes = matchResult.groupValues[1]
