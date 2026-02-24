@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.ArrayDeque
+import id.project.df.dnote.feature.note.domain.model.Note
 
 @HiltViewModel(assistedFactory = NoteEditorViewModel.Factory::class)
 class NoteEditorViewModel @AssistedInject constructor(
@@ -50,6 +51,14 @@ class NoteEditorViewModel @AssistedInject constructor(
     private var lastStableState = EditorSnapshot("", "")
 
     init {
+        viewModelScope.launch {
+            repo.observeNotes("").collect { result ->
+                if (result is Result.Success) {
+                    _uiState.update { it.copy(notes = result.data) }
+                }
+            }
+        }
+
         if (navKey.id != null) {
             viewModelScope.launch {
                 repo.getNote(navKey.id).collect { result ->
@@ -63,16 +72,28 @@ class NoteEditorViewModel @AssistedInject constructor(
     }
 
     fun loadExisting(noteId: String, title: String = "", initialText: String = "", errorMessage: String? = null) {
-        _uiState.value = NoteEditorUiState(
-            noteId = noteId, 
-            title = title, 
-            contentText = initialText, 
-            errorMessage = errorMessage
-        )
+        _uiState.update {
+            it.copy(
+                noteId = noteId,
+                title = title,
+                contentText = initialText,
+                isSaving = false,
+                errorMessage = errorMessage,
+                canUndo = false,
+                canRedo = false
+            )
+        }
         undoStack.clear()
         redoStack.clear()
         lastStableState = EditorSnapshot(title, initialText)
         updateUndoRedoState()
+    }
+
+    fun onNoteSelected(note: Note) {
+        viewModelScope.launch {
+            saveInternal(flush = true)
+            loadExisting(note.id, note.title, note.content)
+        }
     }
 
     fun onContentChanged(newText: String) {
