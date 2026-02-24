@@ -19,14 +19,13 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
-import androidx.compose.material.icons.automirrored.outlined.Help
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatItalic
@@ -34,7 +33,6 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Title
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -69,6 +67,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.project.df.dnote.R
@@ -78,7 +77,56 @@ import id.project.df.dnote.core.ui.markdown.rules.BoldRule
 import id.project.df.dnote.core.ui.markdown.rules.HeaderRule
 import id.project.df.dnote.core.ui.markdown.rules.ItalicRule
 import id.project.df.dnote.core.ui.theme.DNoteTheme
+import id.project.df.dnote.feature.note.domain.model.Note
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+fun formatNoteDate(timestamp: Long): String {
+    val sdf = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+    return sdf.format(Date(timestamp))
+}
+
+@Composable
+fun DrawerNoteItem(
+    note: Note,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val hasTitle = note.title.isNotBlank()
+    val dateText = formatNoteDate(note.updatedAt)
+
+    NavigationDrawerItem(
+        label = {
+            if (hasTitle) {
+                Column {
+                    Text(
+                        text = note.title,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = dateText,
+                        maxLines = 1,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                Text(
+                    text = dateText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        },
+        selected = isSelected,
+        onClick = onClick,
+        modifier = Modifier.padding(vertical = 4.dp),
+        shape = RoundedCornerShape(12.dp)
+    )
+}
 
 @Composable
 fun NoteEditorRoute(
@@ -106,7 +154,8 @@ fun NoteEditorRoute(
         onContentChange = { newValue -> viewModel.onContentChanged(newValue.text) },
         onSaveNote = { viewModel.onCloseRequested() },
         onUndo = { viewModel.onUndo() },
-        onRedo = { viewModel.onRedo() }
+        onRedo = { viewModel.onRedo() },
+        onNoteSelected = { note -> viewModel.onNoteSelected(note) }
     )
 }
 
@@ -118,7 +167,8 @@ fun EditorScreen(
     onContentChange: (TextFieldValue) -> Unit,
     onSaveNote: () -> Unit,
     onUndo: () -> Unit,
-    onRedo: () -> Unit
+    onRedo: () -> Unit,
+    onNoteSelected: (Note) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -149,43 +199,33 @@ fun EditorScreen(
     ModalNavigationDrawer(
         drawerContent = {
             ModalDrawerSheet {
-                Column(
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                        .verticalScroll(rememberScrollState())
+                Text(
+                    text = "All Notes",
+                    modifier = Modifier.padding(16.dp),
+                    style = MaterialTheme.typography.headlineSmall
+                )
+                HorizontalDivider()
+
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp)
                 ) {
-                    Spacer(Modifier.height(12.dp))
-                    Text("Drawer Title", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
-                    HorizontalDivider()
-
-                    Text("Section 1", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
-                    NavigationDrawerItem(
-                        label = { Text("Item 1") },
-                        selected = false,
-                        onClick = { /* Handle click */ }
-                    )
-                    NavigationDrawerItem(
-                        label = { Text("Item 2") },
-                        selected = false,
-                        onClick = { /* Handle click */ }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-                    Text("Section 2", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
-                    NavigationDrawerItem(
-                        label = { Text("Settings") },
-                        selected = false,
-                        icon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
-                        badge = { Text("20") },
-                        onClick = { /* Handle click */ }
-                    )
-                    NavigationDrawerItem(
-                        label = { Text("Help and feedback") },
-                        selected = false,
-                        icon = { Icon(Icons.AutoMirrored.Outlined.Help, contentDescription = null) },
-                        onClick = { /* Handle click */ },
-                    )
-                    Spacer(Modifier.height(12.dp))
+                    items(uiState.notes, key = { it.id }) { note ->
+                        DrawerNoteItem(
+                            note = note,
+                            isSelected = uiState.noteId == note.id,
+                            onClick = {
+                                scope.launch {
+                                    drawerState.close()
+                                }
+                                onNoteSelected(note)
+                            }
+                        )
+                    }
+                    item {
+                        Spacer(Modifier.height(12.dp))
+                    }
                 }
             }
         },
@@ -390,7 +430,8 @@ fun EditorScreenPreview() {
             onSaveNote = {},
             onTitleChange = {},
             onUndo = {},
-            onRedo = {}
+            onRedo = {},
+            onNoteSelected = {}
         )
     }
 }
