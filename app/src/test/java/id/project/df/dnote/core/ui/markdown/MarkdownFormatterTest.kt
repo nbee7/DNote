@@ -77,10 +77,72 @@ class MarkdownFormatterTest {
     fun `toggleStyle inserts wrapper in whitespace`() {
         val rule = BoldRule()
         val value = TextFieldValue("Hello ", TextRange(6)) // End of string
-        
+
         val result = formatter.toggleStyle(value, rule)
-        
+
         assertEquals("Hello ****", result.text)
         assertEquals(8, result.selection.start) // Cursor in middle (6 + 2)
+    }
+
+    @Test
+    fun `processInput normal char no change`() {
+        val oldValue = TextFieldValue("hello", TextRange(5))
+        val newValue = TextFieldValue("hello ", TextRange(6))
+
+        val result = formatter.processInput(newValue, oldValue)
+
+        assertEquals(newValue, result)
+    }
+
+    @Test
+    fun `processInput completing bold adds space`() {
+        val oldValue = TextFieldValue("**word", TextRange(6))
+        val newValue = TextFieldValue("**word**", TextRange(8))
+
+        val result = formatter.processInput(newValue, oldValue)
+
+        assertEquals("**word** ", result.text)
+        assertEquals(9, result.selection.start)
+    }
+
+    @Test
+    fun `processInput completing italic adds space`() {
+        val oldValue = TextFieldValue("*word", TextRange(5))
+        val newValue = TextFieldValue("*word*", TextRange(6))
+
+        val result = formatter.processInput(newValue, oldValue)
+
+        assertEquals("*word* ", result.text)
+        assertEquals(7, result.selection.start)
+    }
+
+    @Test
+    fun `processInput text deletion returns unchanged`() {
+        val oldValue = TextFieldValue("hello", TextRange(5))
+        val newValue = TextFieldValue("hell", TextRange(4))
+
+        val result = formatter.processInput(newValue, oldValue)
+
+        assertEquals(newValue, result)
+    }
+
+    @Test
+    fun `processInput cursor not at match end returns unchanged`() {
+        val oldValue = TextFieldValue("**word**", TextRange(3))
+        val newValue = TextFieldValue("**word**x", TextRange(4))
+
+        val result = formatter.processInput(newValue, oldValue)
+
+        assertEquals(newValue, result)
+    }
+
+    @Test
+    fun `processInput empty rules returns unchanged`() {
+        val oldValue = TextFieldValue("**word", TextRange(6))
+        val newValue = TextFieldValue("**word**", TextRange(8))
+
+        val result = formatter.processInput(newValue, oldValue, emptyList())
+
+        assertEquals(newValue, result)
     }
 }

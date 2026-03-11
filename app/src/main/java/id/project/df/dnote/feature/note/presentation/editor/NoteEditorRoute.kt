@@ -181,22 +181,17 @@ fun EditorScreen(
 ) {
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-
     val textFieldValueState = remember { mutableStateOf(TextFieldValue(uiState.contentText)) }
 
     LaunchedEffect(uiState.contentText) {
         if (uiState.contentText != textFieldValueState.value.text) {
-             textFieldValueState.value = textFieldValueState.value.copy(text = uiState.contentText)
+            textFieldValueState.value = textFieldValueState.value.copy(text = uiState.contentText)
         }
     }
 
     val markdownTransformation = remember(textFieldValueState.value.selection) {
         MarkdownVisualTransformation(
-            listOf(
-                BoldRule(),
-                ItalicRule(),
-                HeaderRule()
-            ),
+            listOf(BoldRule(), ItalicRule(), HeaderRule()),
             cursorPosition = textFieldValueState.value.selection.start
         )
     }
@@ -206,240 +201,263 @@ fun EditorScreen(
     val isKeyboardVisible = WindowInsets.isImeVisible
 
     Box(modifier = Modifier.fillMaxSize()) {
-    ModalNavigationDrawer(
-        drawerContent = {
-            ModalDrawerSheet {
-                Text(
-                    text = "All Notes",
-                    modifier = Modifier.padding(16.dp),
-                    style = MaterialTheme.typography.headlineSmall
-                )
-                HorizontalDivider()
-
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp)
-                ) {
-                    items(uiState.notes, key = { it.id }) { note ->
-                        DrawerNoteItem(
-                            note = note,
-                            isSelected = uiState.noteId == note.id,
-                            onClick = {
-                                scope.launch {
-                                    drawerState.close()
-                                }
-                                onNoteSelected(note)
-                            }
-                        )
-                    }
-                    item {
-                        Spacer(Modifier.height(12.dp))
-                    }
-                }
-            }
-        },
-        drawerState = drawerState
-    ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        TextField(
-                            value = uiState.title,
-                            onValueChange = onTitleChange,
-                            modifier = Modifier.fillMaxWidth(),
-                            textStyle = MaterialTheme.typography.headlineSmall,
-                            placeholder = {
-                                Text(
-                                    "Untitled Note",
-                                    style = MaterialTheme.typography.headlineSmall
-                                )
-                            },
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent,
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent,
-                            ),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(
-                                capitalization = KeyboardCapitalization.Sentences,
-                                autoCorrect = false,
-                                imeAction = ImeAction.Next
-                            )
-                        )
+        ModalNavigationDrawer(
+            drawerContent = {
+                EditorDrawerContent(
+                    notes = uiState.notes,
+                    currentNoteId = uiState.noteId,
+                    onNoteSelected = { note ->
+                        scope.launch { drawerState.close() }
+                        onNoteSelected(note)
                     },
-                    actions = {
-                        IconButton(
-                            onClick = onUndo,
-                            enabled = uiState.canUndo
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Undo,
-                                contentDescription = "Undo",
-                                tint = if (uiState.canUndo) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f)
-                            )
-                        }
-                        IconButton(
-                            onClick = onRedo,
-                            enabled = uiState.canRedo
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Redo,
-                                contentDescription = "Redo",
-                                tint = if (uiState.canRedo) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f)
-                            )
-                        }
-                        IconButton(
-                            onClick = onSaveNote,
-                            enabled = !uiState.isSaving
-                        ) {
-                            if (uiState.isSaving) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.Save,
-                                    contentDescription = "Save note"
-                                )
-                            }
-                        }
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = {
-                            scope.launch {
-                                if (drawerState.isClosed) {
-                                    drawerState.open()
-                                } else {
-                                    drawerState.close()
-                                }
-                            }
-                        }) {
-                            Icon(
-                                painter = painterResource(R.drawable.outline_format_list_bulleted_24),
-                                contentDescription = "Open List"
-                            )
-                        }
-                    }
+                    onClose = { scope.launch { drawerState.close() } }
                 )
             },
-            bottomBar = {
-                if (isKeyboardVisible) {
-                    Column {
-                        KeyboardAccessoryBar(
-                            onBoldClick = {
-                                val newValue =
-                                    markdownFormatter.toggleStyle(textFieldValueState.value, BoldRule())
-                                textFieldValueState.value = newValue
-                                onContentChange(newValue)
-                            },
-                            onItalicClick = {
-                                val newValue = markdownFormatter.toggleStyle(
-                                    textFieldValueState.value,
-                                    ItalicRule()
-                                )
-                                textFieldValueState.value = newValue
-                                onContentChange(newValue)
-                            },
-                            onHeaderClick = {
-                                val newValue = markdownFormatter.toggleCyclicHeading(
-                                    textFieldValueState.value,
-                                    HeaderRule()
-                                )
-                                textFieldValueState.value = newValue
-                                onContentChange(newValue)
+            drawerState = drawerState
+        ) {
+            Scaffold(
+                topBar = {
+                    EditorTopBar(
+                        title = uiState.title,
+                        canUndo = uiState.canUndo,
+                        canRedo = uiState.canRedo,
+                        isSaving = uiState.isSaving,
+                        onTitleChange = onTitleChange,
+                        onUndo = onUndo,
+                        onRedo = onRedo,
+                        onSaveNote = onSaveNote,
+                        onNavigationClick = {
+                            scope.launch {
+                                if (drawerState.isClosed) drawerState.open()
+                                else drawerState.close()
                             }
-                        )
-                        Spacer(modifier = Modifier.windowInsetsBottomHeight(
-                            WindowInsets.ime.exclude(WindowInsets.navigationBars)
-                        ))
-                    }
-                } else {
-                    BrowserBottomBar(
+                        }
+                    )
+                },
+                bottomBar = {
+                    EditorBottomBar(
+                        isKeyboardVisible = isKeyboardVisible,
                         tabCount = uiState.tabCount,
-                        onSearch = {},
+                        textFieldValue = textFieldValueState.value,
+                        markdownFormatter = markdownFormatter,
+                        onContentChange = { newValue ->
+                            textFieldValueState.value = newValue
+                            onContentChange(newValue)
+                        },
                         onNewTab = onNewTab,
-                        onTabsClick = onTabsClick,
-                        onMenuClick = {}
+                        onTabsClick = onTabsClick
+                    )
+                }
+            ) { paddingValues ->
+                NoteContentTextField(
+                    value = textFieldValueState.value,
+                    markdownTransformation = markdownTransformation,
+                    onValueChange = { newValue ->
+                        val processedValue = markdownFormatter.processInput(newValue, textFieldValueState.value)
+                        textFieldValueState.value = processedValue
+                        onContentChange(processedValue)
+                    },
+                    modifier = Modifier
+                        .padding(paddingValues)
+                        .fillMaxSize()
+                        .padding(16.dp)
+                )
+            }
+        }
+
+        androidx.compose.animation.AnimatedVisibility(
+            visible = uiState.showTabGrid,
+            enter = androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.fadeOut()
+        ) {
+            TabGridOverlay(
+                tabs = uiState.tabs,
+                activeTabIndex = uiState.activeTabIndex,
+                onSwitchTab = onSwitchTab,
+                onCloseTab = onCloseTab,
+                onNewTab = onNewTab,
+                onDone = onDismissTabGrid
+            )
+        }
+    }
+}
+
+@Composable
+private fun EditorDrawerContent(
+    notes: List<Note>,
+    currentNoteId: String?,
+    onNoteSelected: (Note) -> Unit,
+    onClose: () -> Unit
+) {
+    ModalDrawerSheet {
+        Text(
+            text = "All Notes",
+            modifier = Modifier.padding(16.dp),
+            style = MaterialTheme.typography.headlineSmall
+        )
+        HorizontalDivider()
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+        ) {
+            items(notes, key = { it.id }) { note ->
+                DrawerNoteItem(
+                    note = note,
+                    isSelected = currentNoteId == note.id,
+                    onClick = { onNoteSelected(note) }
+                )
+            }
+            item {
+                Spacer(Modifier.height(12.dp))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditorTopBar(
+    title: String,
+    canUndo: Boolean,
+    canRedo: Boolean,
+    isSaving: Boolean,
+    onTitleChange: (String) -> Unit,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onSaveNote: () -> Unit,
+    onNavigationClick: () -> Unit
+) {
+    TopAppBar(
+        title = {
+            TextField(
+                value = title,
+                onValueChange = onTitleChange,
+                modifier = Modifier.fillMaxWidth(),
+                textStyle = MaterialTheme.typography.headlineSmall,
+                placeholder = {
+                    Text(
+                        "Untitled Note",
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                },
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                ),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Sentences,
+                    autoCorrect = false,
+                    imeAction = ImeAction.Next
+                )
+            )
+        },
+        actions = {
+            IconButton(onClick = onUndo, enabled = canUndo) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Undo,
+                    contentDescription = "Undo",
+                    tint = if (canUndo) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f)
+                )
+            }
+            IconButton(onClick = onRedo, enabled = canRedo) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Redo,
+                    contentDescription = "Redo",
+                    tint = if (canRedo) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f)
+                )
+            }
+            IconButton(onClick = onSaveNote, enabled = !isSaving) {
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Save,
+                        contentDescription = "Save note"
                     )
                 }
             }
-        ) { paddingValues ->
-            TextField(
-                value = textFieldValueState.value,
-                onValueChange = { newValue ->
-                    var processedValue = newValue
-                    
-                    val oldText = textFieldValueState.value.text
-                    val newText = newValue.text
-                    
-                    if (newText.length > oldText.length) {
-                        val addedCharIndex = newValue.selection.start - 1
-                        if (addedCharIndex >= 0 && addedCharIndex < newText.length) {
-                             
-                             val rules = listOf(BoldRule(), ItalicRule(), HeaderRule())
-                             var justCompletedMatch = false
-                             
-                             for (rule in rules) {
-                                 val matches = rule.pattern.findAll(newText)
-                                 for (match in matches) {
-                                     if (match.range.last + 1 == newValue.selection.start) {
-                                         val (_, endLen) = rule.getDelimiterLengths(match)
-                                         if (endLen > 0) {
-                                             justCompletedMatch = true
-                                             break
-                                         }
-                                     }
-                                 }
-                                 if (justCompletedMatch) break
-                             }
-                             
-                             if (justCompletedMatch) {
-                                 processedValue = newValue.copy(
-                                     text = "$newText ",
-                                     selection = TextRange(newValue.selection.start + 1)
-                                 )
-                             }
-                        }
-                    }
+        },
+        navigationIcon = {
+            IconButton(onClick = onNavigationClick) {
+                Icon(
+                    painter = painterResource(R.drawable.outline_format_list_bulleted_24),
+                    contentDescription = "Open List"
+                )
+            }
+        }
+    )
+}
 
-                    textFieldValueState.value = processedValue
-                    onContentChange(processedValue)
+@Composable
+private fun EditorBottomBar(
+    isKeyboardVisible: Boolean,
+    tabCount: Int,
+    textFieldValue: TextFieldValue,
+    markdownFormatter: MarkdownFormatter,
+    onContentChange: (TextFieldValue) -> Unit,
+    onNewTab: () -> Unit,
+    onTabsClick: () -> Unit
+) {
+    if (isKeyboardVisible) {
+        Column {
+            KeyboardAccessoryBar(
+                onBoldClick = {
+                    val newValue = markdownFormatter.toggleStyle(textFieldValue, BoldRule())
+                    onContentChange(newValue)
                 },
-                modifier = Modifier
-                    .padding(paddingValues)
-                    .fillMaxSize()
-                    .padding(16.dp),
-                textStyle = MaterialTheme.typography.bodyMedium,
-                placeholder = { Text("Start writing your note...") },
-                visualTransformation = markdownTransformation,
-                colors = TextFieldDefaults.colors(
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
+                onItalicClick = {
+                    val newValue = markdownFormatter.toggleStyle(textFieldValue, ItalicRule())
+                    onContentChange(newValue)
+                },
+                onHeaderClick = {
+                    val newValue = markdownFormatter.toggleCyclicHeading(textFieldValue, HeaderRule())
+                    onContentChange(newValue)
+                }
+            )
+            Spacer(
+                modifier = Modifier.windowInsetsBottomHeight(
+                    WindowInsets.ime.exclude(WindowInsets.navigationBars)
                 )
             )
         }
-
-    }
-
-    androidx.compose.animation.AnimatedVisibility(
-        visible = uiState.showTabGrid,
-        enter = androidx.compose.animation.fadeIn(),
-        exit = androidx.compose.animation.fadeOut()
-    ) {
-        TabGridOverlay(
-            tabs = uiState.tabs,
-            activeTabIndex = uiState.activeTabIndex,
-            onSwitchTab = onSwitchTab,
-            onCloseTab = onCloseTab,
+    } else {
+        BrowserBottomBar(
+            tabCount = tabCount,
+            onSearch = {},
             onNewTab = onNewTab,
-            onDone = onDismissTabGrid
+            onTabsClick = onTabsClick,
+            onMenuClick = {}
         )
     }
-    } // end Box
+}
+
+@Composable
+private fun NoteContentTextField(
+    value: TextFieldValue,
+    markdownTransformation: MarkdownVisualTransformation,
+    onValueChange: (TextFieldValue) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    TextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier,
+        textStyle = MaterialTheme.typography.bodyMedium,
+        placeholder = { Text("Start writing your note...") },
+        visualTransformation = markdownTransformation,
+        colors = TextFieldDefaults.colors(
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+        )
+    )
 }
 
 @Preview(showBackground = true)
