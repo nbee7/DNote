@@ -2,7 +2,9 @@ package id.project.df.dnote.core.ui.markdown
 
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import id.project.df.dnote.core.ui.markdown.rules.BoldRule
 import id.project.df.dnote.core.ui.markdown.rules.HeaderRule
+import id.project.df.dnote.core.ui.markdown.rules.ItalicRule
 
 class MarkdownFormatter {
 
@@ -92,5 +94,33 @@ class MarkdownFormatter {
         }
 
         return value.copy(text = newText, selection = newSelection)
+    }
+
+    fun processInput(
+        newValue: TextFieldValue,
+        oldValue: TextFieldValue,
+        rules: List<MarkdownRule> = listOf(BoldRule(), ItalicRule(), HeaderRule())
+    ): TextFieldValue {
+        val newText = newValue.text
+        if (newText.length <= oldValue.text.length) return newValue
+        val addedCharIndex = newValue.selection.start - 1
+        if (addedCharIndex < 0 || addedCharIndex >= newText.length) return newValue
+        return if (checkIfMatchCompleted(newText, newValue.selection.start, rules)) {
+            newValue.copy(text = "$newText ", selection = TextRange(newValue.selection.start + 1))
+        } else {
+            newValue
+        }
+    }
+
+    private fun checkIfMatchCompleted(text: String, cursorPosition: Int, rules: List<MarkdownRule>): Boolean {
+        for (rule in rules) {
+            for (match in rule.pattern.findAll(text)) {
+                if (match.range.last + 1 == cursorPosition) {
+                    val (_, endLen) = rule.getDelimiterLengths(match)
+                    if (endLen > 0) return true
+                }
+            }
+        }
+        return false
     }
 }

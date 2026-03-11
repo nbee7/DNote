@@ -12,37 +12,18 @@ class MarkdownVisualTransformation(
 
     override fun filter(text: AnnotatedString): TransformedText {
         val originalText = text.text
-        val builder = AnnotatedString.Builder()
-        
-        val hiddenIndices = BooleanArray(originalText.length) { false }
-        
-        rules.forEach { rule ->
-            rule.pattern.findAll(originalText).forEach { matchResult ->
-                val range = matchResult.range
-                val isFocused = cursorPosition in range.first..range.last + 1
-                
-                if (!isFocused) {
-                    val (startDelimLen, endDelimLen) = rule.getDelimiterLengths(matchResult)
-                    
-                    for (i in 0 until startDelimLen) {
-                        if (range.first + i < originalText.length) {
-                            hiddenIndices[range.first + i] = true
-                        }
-                    }
-                    
-                    for (i in 0 until endDelimLen) {
-                        if (range.last - i >= 0) {
-                            hiddenIndices[range.last - i] = true
-                        }
-                    }
-                }
-            }
+        if (originalText.isEmpty()) {
+            return TransformedText(text, object : OffsetMapping {
+                override fun originalToTransformed(offset: Int) = 0
+                override fun transformedToOriginal(offset: Int) = 0
+            })
         }
 
-
+        val hiddenIndices = buildHiddenIndices(originalText)
+        val builder = AnnotatedString.Builder()
         val originalToTransformed = IntArray(originalText.length + 1)
         val transformedToOriginal = mutableListOf<Int>()
-        
+
         var transformedIndex = 0
         for (i in originalText.indices) {
             originalToTransformed[i] = transformedIndex
@@ -56,22 +37,8 @@ class MarkdownVisualTransformation(
         transformedToOriginal.add(originalText.length)
 
         val transformedString = builder.toAnnotatedString()
-
         val styleBuilder = AnnotatedString.Builder(transformedString)
-
-        rules.forEach { rule ->
-            rule.pattern.findAll(originalText).forEach { matchResult ->
-                val range = matchResult.range
-
-                val start = originalToTransformed[range.first]
-                val end = originalToTransformed[range.last + 1]
-                
-                if (end > start) {
-                     val style = rule.getStyle(matchResult)
-                     styleBuilder.addStyle(style, start, end)
-                }
-            }
-        }
+        applyStyles(styleBuilder, originalText, originalToTransformed)
 
         return TransformedText(
             styleBuilder.toAnnotatedString(),
@@ -85,5 +52,47 @@ class MarkdownVisualTransformation(
                 }
             }
         )
+    }
+
+    private fun buildHiddenIndices(originalText: String): BooleanArray {
+        val hiddenIndices = BooleanArray(originalText.length) { false }
+        rules.forEach { rule ->
+            rule.pattern.findAll(originalText).forEach { matchResult ->
+                val range = matchResult.range
+                val isFocused = cursorPosition in range.first..range.last + 1
+                if (!isFocused) {
+                    hideDelimiters(hiddenIndices, range, rule.getDelimiterLengths(matchResult), originalText.length)
+                }
+            }
+        }
+        return hiddenIndices
+    }
+
+    private fun hideDelimiters(hiddenIndices: BooleanArray, range: IntRange, delimLengths: Pair<Int, Int>, textLength: Int) {
+        val (startDelimLen, endDelimLen) = delimLengths
+        for (i in 0 until startDelimLen) {
+            if (range.first + i < textLength) {
+                hiddenIndices[range.first + i] = true
+            }
+        }
+        for (i in 0 until endDelimLen) {
+            if (range.last - i >= 0) {
+                hiddenIndices[range.last - i] = true
+            }
+        }
+    }
+
+    private fun applyStyles(styleBuilder: AnnotatedString.Builder, originalText: String, originalToTransformed: IntArray) {
+        rules.forEach { rule ->
+            rule.pattern.findAll(originalText).forEach { matchResult ->
+                val range = matchResult.range
+                val start = originalToTransformed[range.first]
+                val end = originalToTransformed[range.last + 1]
+                if (end > start) {
+                    val style = rule.getStyle(matchResult)
+                    styleBuilder.addStyle(style, start, end)
+                }
+            }
+        }
     }
 }
