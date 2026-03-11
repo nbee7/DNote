@@ -26,10 +26,10 @@ import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
-abstract class RepositoryModule {
+interface RepositoryModule {
     @Binds
     @Singleton
-    abstract fun bindNotesRepository(impl: NotesRepositoryImpl): NoteRepositoryInterface
+    fun bindNotesRepository(impl: NotesRepositoryImpl): NoteRepositoryInterface
 }
 
 @Serializable

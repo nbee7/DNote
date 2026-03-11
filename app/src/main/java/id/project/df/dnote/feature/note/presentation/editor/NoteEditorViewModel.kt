@@ -6,8 +6,10 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import id.project.df.dnote.core.data.SessionRepository
 import id.project.df.dnote.feature.note.data.repository.Result
 import id.project.df.dnote.feature.note.di.NoteEditor
+import id.project.df.dnote.feature.note.domain.model.Note
 import id.project.df.dnote.feature.note.domain.repository.NoteRepositoryInterface
 import id.project.df.dnote.feature.note.domain.usecase.UpsertNoteUseCase
 import id.project.df.dnote.feature.note.domain.usecase.DeleteNoteUseCase
@@ -18,20 +20,21 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.ArrayDeque
-import id.project.df.dnote.feature.note.domain.model.Note
 
 @HiltViewModel(assistedFactory = NoteEditorViewModel.Factory::class)
 class NoteEditorViewModel @AssistedInject constructor(
     @Assisted private val navKey: NoteEditor,
     @Assisted private val upsertNote: UpsertNoteUseCase,
     @Assisted private val deleteNote: DeleteNoteUseCase,
-    @Assisted private val repo: NoteRepositoryInterface
+    @Assisted private val repo: NoteRepositoryInterface,
+    private val sessionRepository: SessionRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(NoteEditorUiState())
@@ -64,47 +67,154 @@ class NoteEditorViewModel @AssistedInject constructor(
                 repo.getNote(navKey.id).collect { result ->
                     when (result) {
                         is Result.Success -> loadExisting(navKey.id, result.data.title, result.data.content, null)
-                        is Result.Error -> loadExisting(navKey.id,  errorMessage = result.exception.message.toString())
+                        is Result.Error -> loadExisting(navKey.id, errorMessage = result.exception.message.toString())
                     }
                 }
+            }
+        } else {
+            viewModelScope.launch {
+                restoreSession()
             }
         }
     }
 
+    private suspend fun restoreSession() {
+        val session = sessionRepository.getSession() ?: return
+        val tabs = mutableListOf<TabState>()
+        for (noteId in session.noteIds) {
+            val result = repo.getNote(noteId).first()
+            if (result is Result.Success) {
+                tabs.add(TabState(noteId = noteId, title = result.data.title, contentText = result.data.content))
+            }
+        }
+        if (tabs.isEmpty()) return
+        val activeIndex = session.activeTabIndex.coerceIn(0, tabs.lastIndex)
+        _uiState.update { state ->
+            state.copy(tabs = tabs, activeTabIndex = activeIndex, canUndo = false, canRedo = false)
+        }
+        resetUndoRedo()
+    }
+    fun onNewTab() {
+        viewModelScope.launch {
+            saveInternal(flush = true)
+            resetUndoRedo()
+            _uiState.update { state ->
+                val newTabs = state.tabs + TabState()
+                state.copy(
+                    tabs = newTabs,
+                    activeTabIndex = newTabs.lastIndex,
+                    showTabGrid = false,
+                    canUndo = false,
+                    canRedo = false
+                )
+            }
+            persistSession()
+        }
+    }
+
+    fun onSwitchTab(index: Int) {
+        val state = _uiState.value
+        if (index == state.activeTabIndex || index !in state.tabs.indices) return
+        viewModelScope.launch {
+            saveInternal(flush = true)
+            resetUndoRedo()
+            _uiState.update {
+                it.copy(activeTabIndex = index, showTabGrid = false, canUndo = false, canRedo = false)
+            }
+            persistSession()
+        }
+    }
+
+    fun onCloseTab(index: Int) {
+        val state = _uiState.value
+        if (index !in state.tabs.indices) return
+        viewModelScope.launch {
+            val tab = state.tabs[index]
+            if (tab.noteId != null && (tab.title.isNotBlank() || tab.contentText.isNotBlank())) {
+                runCatching { upsertNote(tab.noteId, tab.title, tab.contentText) }
+            }
+
+            _uiState.update { s ->
+                val newTabs = s.tabs.toMutableList().apply { removeAt(index) }
+                if (newTabs.isEmpty()) {
+                    s.copy(tabs = listOf(TabState()), activeTabIndex = 0, canUndo = false, canRedo = false)
+                } else {
+                    val newActiveIndex = when {
+                        index < s.activeTabIndex -> s.activeTabIndex - 1
+                        index == s.activeTabIndex -> index.coerceAtMost(newTabs.lastIndex)
+                        else -> s.activeTabIndex
+                    }
+                    s.copy(tabs = newTabs, activeTabIndex = newActiveIndex, canUndo = false, canRedo = false)
+                }
+            }
+            resetUndoRedo()
+            persistSession()
+        }
+    }
+
+    fun onTabsClick() {
+        _uiState.update { it.copy(showTabGrid = !it.showTabGrid) }
+    }
+
+    fun onDismissTabGrid() {
+        _uiState.update { it.copy(showTabGrid = false) }
+    }
+
+    fun onNoteSelected(note: Note) {
+        val state = _uiState.value
+        val existingIndex = state.tabs.indexOfFirst { it.noteId == note.id }
+        if (existingIndex != -1) {
+            onSwitchTab(existingIndex)
+            return
+        }
+        viewModelScope.launch {
+            saveInternal(flush = true)
+            resetUndoRedo()
+            _uiState.update { s ->
+                val newTab = TabState(noteId = note.id, title = note.title, contentText = note.content)
+                val newTabs = s.tabs + newTab
+                s.copy(
+                    tabs = newTabs,
+                    activeTabIndex = newTabs.lastIndex,
+                    showTabGrid = false,
+                    canUndo = false,
+                    canRedo = false
+                )
+            }
+            persistSession()
+        }
+    }
+
+    // --- Editor operations (operate on active tab) ---
+
     fun loadExisting(noteId: String, title: String = "", initialText: String = "", errorMessage: String? = null) {
-        _uiState.update {
-            it.copy(
-                noteId = noteId,
-                title = title,
-                contentText = initialText,
+        _uiState.update { state ->
+            val updatedTab = state.activeTab.copy(noteId = noteId, title = title, contentText = initialText)
+            val updatedTabs = state.tabs.toMutableList().apply { set(state.activeTabIndex, updatedTab) }
+            state.copy(
+                tabs = updatedTabs,
                 isSaving = false,
                 errorMessage = errorMessage,
                 canUndo = false,
                 canRedo = false
             )
         }
-        undoStack.clear()
-        redoStack.clear()
+        resetUndoRedo()
         lastStableState = EditorSnapshot(title, initialText)
-        updateUndoRedoState()
-    }
-
-    fun onNoteSelected(note: Note) {
-        viewModelScope.launch {
-            saveInternal(flush = true)
-            loadExisting(note.id, note.title, note.content)
-        }
     }
 
     fun onContentChanged(newText: String) {
         if (redoStack.isNotEmpty()) {
             redoStack.clear()
         }
-        _uiState.update { 
-            val updated = it.copy(contentText = newText, errorMessage = null)
-            val currentState = EditorSnapshot(updated.title, updated.contentText)
-            val hasPending = currentState != lastStableState
-            updated.copy(
+        _uiState.update { state ->
+            val updatedTab = state.activeTab.copy(contentText = newText)
+            val updatedTabs = state.tabs.toMutableList().apply { set(state.activeTabIndex, updatedTab) }
+            val currentSnapshot = EditorSnapshot(updatedTab.title, updatedTab.contentText)
+            val hasPending = currentSnapshot != lastStableState
+            state.copy(
+                tabs = updatedTabs,
+                errorMessage = null,
                 canUndo = undoStack.isNotEmpty() || hasPending,
                 canRedo = redoStack.isNotEmpty()
             )
@@ -117,11 +227,14 @@ class NoteEditorViewModel @AssistedInject constructor(
         if (redoStack.isNotEmpty()) {
             redoStack.clear()
         }
-        _uiState.update { 
-            val updated = it.copy(title = newText, errorMessage = null)
-            val currentState = EditorSnapshot(updated.title, updated.contentText)
-            val hasPending = currentState != lastStableState
-            updated.copy(
+        _uiState.update { state ->
+            val updatedTab = state.activeTab.copy(title = newText)
+            val updatedTabs = state.tabs.toMutableList().apply { set(state.activeTabIndex, updatedTab) }
+            val currentSnapshot = EditorSnapshot(updatedTab.title, updatedTab.contentText)
+            val hasPending = currentSnapshot != lastStableState
+            state.copy(
+                tabs = updatedTabs,
+                errorMessage = null,
                 canUndo = undoStack.isNotEmpty() || hasPending,
                 canRedo = redoStack.isNotEmpty()
             )
@@ -129,7 +242,7 @@ class NoteEditorViewModel @AssistedInject constructor(
         scheduleAutosave()
         scheduleUndoSnapshot()
     }
-    
+
     fun onUndo() {
         undoDebounceJob?.cancel()
         val currentUi = _uiState.value
@@ -160,8 +273,10 @@ class NoteEditorViewModel @AssistedInject constructor(
     }
 
     private fun applySnapshot(snapshot: EditorSnapshot) {
-        _uiState.update { 
-            it.copy(title = snapshot.title, contentText = snapshot.content) 
+        _uiState.update { state ->
+            val updatedTab = state.activeTab.copy(title = snapshot.title, contentText = snapshot.content)
+            val updatedTabs = state.tabs.toMutableList().apply { set(state.activeTabIndex, updatedTab) }
+            state.copy(tabs = updatedTabs)
         }
         updateUndoRedoState()
         scheduleAutosave()
@@ -189,12 +304,33 @@ class NoteEditorViewModel @AssistedInject constructor(
         val currentUi = _uiState.value
         val currentState = EditorSnapshot(currentUi.title, currentUi.contentText)
         val hasPending = currentState != lastStableState
-        
-        _uiState.update { 
+
+        _uiState.update {
             it.copy(
                 canUndo = undoStack.isNotEmpty() || hasPending,
                 canRedo = redoStack.isNotEmpty()
-            ) 
+            )
+        }
+    }
+
+    private fun resetUndoRedo() {
+        undoDebounceJob?.cancel()
+        autosaveJob?.cancel()
+        undoStack.clear()
+        redoStack.clear()
+        val current = _uiState.value
+        lastStableState = EditorSnapshot(current.title, current.contentText)
+    }
+
+    private fun persistSession() {
+        viewModelScope.launch {
+            val state = _uiState.value
+            val noteIds = state.tabs.mapNotNull { it.noteId }
+            if (noteIds.isEmpty()) {
+                sessionRepository.clearSession()
+            } else {
+                sessionRepository.saveSession(noteIds, state.activeTabIndex)
+            }
         }
     }
 
@@ -220,21 +356,27 @@ class NoteEditorViewModel @AssistedInject constructor(
 
             runCatching {
                 val latest = _uiState.value
+                val currentNoteId = latest.noteId
                 if (latest.title.isBlank() && latest.contentText.isBlank()) {
-                     if (latest.noteId != null) {
-                         deleteNote(latest.noteId)
-                     }
-                     null
+                    if (currentNoteId != null) {
+                        deleteNote(currentNoteId)
+                    }
+                    null
                 } else {
                     upsertNote(
-                        latest.noteId,
+                        currentNoteId,
                         latest.title,
                         latest.contentText
                     )
                 }
             }.onSuccess { newIdOrNull ->
                 if (_uiState.value.noteId == null && newIdOrNull != null) {
-                    _uiState.update { it.copy(noteId = newIdOrNull) }
+                    _uiState.update { state ->
+                        val updatedTab = state.activeTab.copy(noteId = newIdOrNull)
+                        val updatedTabs = state.tabs.toMutableList().apply { set(state.activeTabIndex, updatedTab) }
+                        state.copy(tabs = updatedTabs)
+                    }
+                    persistSession()
                 }
                 _uiState.update { it.copy(isSaving = false) }
             }.onFailure { t ->
@@ -248,14 +390,13 @@ class NoteEditorViewModel @AssistedInject constructor(
             }.isSuccess
         }
 
-
     @AssistedFactory
-    interface Factory {
+    fun interface Factory {
         fun create(
             navKey: NoteEditor,
             upsertNote: UpsertNoteUseCase,
             deleteNote: DeleteNoteUseCase,
             repo: NoteRepositoryInterface
-        ) : NoteEditorViewModel
+        ): NoteEditorViewModel
     }
 }
