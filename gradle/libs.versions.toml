@@ -13,6 +13,7 @@ kotlin = "2.3.0"
 composeBom = "2025.12.01"
 material3 = "1.4.0"
 navigationCompose = "2.9.6"
+datastorePreferences = "1.1.4"
 roomRuntime = "2.8.4"
 ksp = "2.3.2"
 hilt = "2.57.2"
@@ -62,6 +63,7 @@ androidx-compose-ui-unit = { group = "androidx.compose.ui", name = "ui-unit", ve
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutinesTest" }
+androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastorePreferences" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

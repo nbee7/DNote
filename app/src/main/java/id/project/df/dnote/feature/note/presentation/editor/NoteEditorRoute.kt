@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatItalic
 import androidx.compose.material.icons.filled.Menu
@@ -139,8 +140,6 @@ fun NoteEditorRoute(
 
     LaunchedEffect(events.value) {
         when (val event = events.value) {
-            is NoteEditorEvent.Close -> {
-            }
             is NoteEditorEvent.ShowError -> {
                 Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
             }
@@ -155,7 +154,12 @@ fun NoteEditorRoute(
         onSaveNote = { viewModel.onCloseRequested() },
         onUndo = { viewModel.onUndo() },
         onRedo = { viewModel.onRedo() },
-        onNoteSelected = { note -> viewModel.onNoteSelected(note) }
+        onNoteSelected = { note -> viewModel.onNoteSelected(note) },
+        onNewTab = { viewModel.onNewTab() },
+        onTabsClick = { viewModel.onTabsClick() },
+        onSwitchTab = { index -> viewModel.onSwitchTab(index) },
+        onCloseTab = { index -> viewModel.onCloseTab(index) },
+        onDismissTabGrid = { viewModel.onDismissTabGrid() }
     )
 }
 
@@ -168,7 +172,12 @@ fun EditorScreen(
     onSaveNote: () -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
-    onNoteSelected: (Note) -> Unit
+    onNoteSelected: (Note) -> Unit,
+    onNewTab: () -> Unit,
+    onTabsClick: () -> Unit,
+    onSwitchTab: (Int) -> Unit,
+    onCloseTab: (Int) -> Unit,
+    onDismissTabGrid: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -196,6 +205,7 @@ fun EditorScreen(
     @OptIn(ExperimentalLayoutApi::class)
     val isKeyboardVisible = WindowInsets.isImeVisible
 
+    Box(modifier = Modifier.fillMaxSize()) {
     ModalNavigationDrawer(
         drawerContent = {
             ModalDrawerSheet {
@@ -349,9 +359,10 @@ fun EditorScreen(
                     }
                 } else {
                     BrowserBottomBar(
+                        tabCount = uiState.tabCount,
                         onSearch = {},
-                        onNewTab = {},
-                        onTabsClick = {},
+                        onNewTab = onNewTab,
+                        onTabsClick = onTabsClick,
                         onMenuClick = {}
                     )
                 }
@@ -413,6 +424,22 @@ fun EditorScreen(
         }
 
     }
+
+    androidx.compose.animation.AnimatedVisibility(
+        visible = uiState.showTabGrid,
+        enter = androidx.compose.animation.fadeIn(),
+        exit = androidx.compose.animation.fadeOut()
+    ) {
+        TabGridOverlay(
+            tabs = uiState.tabs,
+            activeTabIndex = uiState.activeTabIndex,
+            onSwitchTab = onSwitchTab,
+            onCloseTab = onCloseTab,
+            onNewTab = onNewTab,
+            onDone = onDismissTabGrid
+        )
+    }
+    } // end Box
 }
 
 @Preview(showBackground = true)
@@ -420,18 +447,18 @@ fun EditorScreen(
 fun EditorScreenPreview() {
     DNoteTheme {
         EditorScreen(
-            uiState = NoteEditorUiState(
-                title = "",
-                contentText = "",
-                isSaving = false,
-                errorMessage = null
-            ),
+            uiState = NoteEditorUiState(),
             onContentChange = {},
             onSaveNote = {},
             onTitleChange = {},
             onUndo = {},
             onRedo = {},
-            onNoteSelected = {}
+            onNoteSelected = {},
+            onNewTab = {},
+            onTabsClick = {},
+            onSwitchTab = {},
+            onCloseTab = {},
+            onDismissTabGrid = {}
         )
     }
 }
@@ -482,7 +509,131 @@ fun KeyboardAccessoryBarPreview() {
 }
 
 @Composable
+fun TabGridOverlay(
+    tabs: List<TabState>,
+    activeTabIndex: Int,
+    onSwitchTab: (Int) -> Unit,
+    onCloseTab: (Int) -> Unit,
+    onNewTab: () -> Unit,
+    onDone: () -> Unit
+) {
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                tonalElevation = 3.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onNewTab) {
+                        Icon(Icons.Default.Add, contentDescription = "New Tab")
+                    }
+                    Text(
+                        text = "${tabs.size} tabs",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    androidx.compose.material3.TextButton(onClick = onDone) {
+                        Text("Done")
+                    }
+                }
+            }
+        }
+    ) { paddingValues ->
+        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+            columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
+            modifier = Modifier
+                .padding(paddingValues)
+                .fillMaxSize()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(
+                count = tabs.size,
+                key = { it }
+            ) { index ->
+                val tab = tabs[index]
+                val isActive = index == activeTabIndex
+                TabGridCard(
+                    tab = tab,
+                    isActive = isActive,
+                    onSelect = { onSwitchTab(index) },
+                    onClose = { onCloseTab(index) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TabGridCard(
+    tab: TabState,
+    isActive: Boolean,
+    onSelect: () -> Unit,
+    onClose: () -> Unit
+) {
+    val borderColor = if (isActive) MaterialTheme.colorScheme.primary else Color.Transparent
+    val borderWidth = if (isActive) 3.dp else 0.dp
+
+    androidx.compose.material3.Card(
+        onClick = onSelect,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .border(borderWidth, borderColor, RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        ),
+        elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp)
+            ) {
+                Text(
+                    text = tab.title.ifBlank { "Untitled Note" },
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = tab.contentText.ifBlank { "No content" },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 5,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close tab",
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun BrowserBottomBar(
+    tabCount: Int,
     onSearch: () -> Unit,
     onNewTab: () -> Unit,
     onTabsClick: () -> Unit,
@@ -521,7 +672,7 @@ fun BrowserBottomBar(
                             )
                             .size(24.dp)
                     ) {
-                        Text("1", style = MaterialTheme.typography.labelSmall)
+                        Text(tabCount.toString(), style = MaterialTheme.typography.labelSmall)
                     }
                 }
                 IconButton(onClick = onMenuClick) { Icon(Icons.Default.Menu, "Menu") }
@@ -535,6 +686,7 @@ fun BrowserBottomBar(
 fun BrowserBottomBarPreview() {
     DNoteTheme {
         BrowserBottomBar(
+            tabCount = 1,
             onSearch = {},
             onNewTab = {},
             onTabsClick = {},
