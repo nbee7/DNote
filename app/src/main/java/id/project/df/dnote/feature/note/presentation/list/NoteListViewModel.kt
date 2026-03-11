@@ -114,7 +114,7 @@ class NotesListViewModel @AssistedInject constructor(
     }
 
     @AssistedFactory
-    interface Factory {
+    fun interface Factory {
         fun create(
             observeNotes: ObserveNotesUseCase,
             deleteNote: DeleteNoteUseCase

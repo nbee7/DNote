@@ -2,7 +2,7 @@ package id.project.df.dnote.core.common.util
 
 import javax.inject.Inject
 
-interface TimeProvider {
+fun interface TimeProvider {
     fun nowMillis(): Long
 }
 

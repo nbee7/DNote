@@ -361,7 +361,7 @@ private fun DeleteConfirmationDialog(
 
 @Preview(showBackground = true)
 @Composable
-fun NotesListScreenPreview_Positive() {
+fun NotesListScreenPreviewPositive() {
     MaterialTheme {
         NotesListScreen(
             uiState = NotesListUiState(
@@ -394,7 +394,7 @@ fun NotesListScreenPreview_Positive() {
 
 @Preview(showBackground = true)
 @Composable
-fun NotesListScreenPreview_Loading() {
+fun NotesListScreenPreviewLoading() {
     MaterialTheme {
         NotesListScreen(
             uiState = NotesListUiState(
@@ -414,7 +414,7 @@ fun NotesListScreenPreview_Loading() {
 
 @Preview(showBackground = true)
 @Composable
-fun NotesListScreenPreview_Error() {
+fun NotesListScreenPreviewError() {
     MaterialTheme {
         NotesListScreen(
             uiState = NotesListUiState(
@@ -434,7 +434,7 @@ fun NotesListScreenPreview_Error() {
 
 @Preview(showBackground = true)
 @Composable
-fun NotesListScreenPreview_Empty() {
+fun NotesListScreenPreviewEmpty() {
     MaterialTheme {
         NotesListScreen(
             uiState = NotesListUiState(
@@ -454,7 +454,7 @@ fun NotesListScreenPreview_Empty() {
 
 @Preview(showBackground = true)
 @Composable
-fun DeleteConfirmationDialogPreview_WithTitle() {
+fun DeleteConfirmationDialogPreviewWithTitle() {
     MaterialTheme {
         DeleteConfirmationDialog(
             title = "Meeting Notes",
@@ -466,7 +466,7 @@ fun DeleteConfirmationDialogPreview_WithTitle() {
 
 @Preview(showBackground = true)
 @Composable
-fun DeleteConfirmationDialogPreview_EmptyTitle() {
+fun DeleteConfirmationDialogPreviewEmptyTitle() {
     MaterialTheme {
         DeleteConfirmationDialog(
             title = "",
