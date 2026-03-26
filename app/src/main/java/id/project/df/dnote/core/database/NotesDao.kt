@@ -55,4 +55,7 @@ interface NotesDao {
         WHERE id = :id
     """)
     suspend fun undoDelete(id: String): Int
+
+    @Query("UPDATE notes SET isPrivate = :isPrivate WHERE id = :id")
+    suspend fun updatePrivacy(id: String, isPrivate: Boolean)
 }

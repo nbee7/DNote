@@ -5,7 +5,8 @@ data class Note(
     val title: String,
     val content: String,
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val isPrivate: Boolean = false
 ) {
     fun toPreview(): String {
         val maxChars = 80

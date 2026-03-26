@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -26,6 +27,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FormatBold
@@ -34,7 +37,13 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Title
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -58,13 +67,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
@@ -79,6 +88,7 @@ import id.project.df.dnote.core.ui.markdown.rules.HeaderRule
 import id.project.df.dnote.core.ui.markdown.rules.ItalicRule
 import id.project.df.dnote.core.ui.theme.DNoteTheme
 import id.project.df.dnote.feature.note.domain.model.Note
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -105,7 +115,8 @@ fun DrawerNoteItem(
                     Text(
                         text = note.title,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.blur(if (note.isPrivate) 8.dp else 0.dp)
                     )
                     Text(
                         text = dateText,
@@ -159,11 +170,46 @@ fun NoteEditorRoute(
         onTabsClick = { viewModel.onTabsClick() },
         onSwitchTab = { index -> viewModel.onSwitchTab(index) },
         onCloseTab = { index -> viewModel.onCloseTab(index) },
-        onDismissTabGrid = { viewModel.onDismissTabGrid() }
+        onDismissTabGrid = { viewModel.onDismissTabGrid() },
+        onTogglePrivacy = { viewModel.onTogglePrivacy() }
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+class EditorScreenState(
+    initialContent: String,
+    val drawerState: DrawerState,
+    private val scope: CoroutineScope,
+    val markdownFormatter: MarkdownFormatter
+) {
+    var textFieldValue by mutableStateOf(TextFieldValue(initialContent))
+        private set
+
+    fun onTextFieldValueChange(newValue: TextFieldValue) {
+        textFieldValue = newValue
+    }
+
+    fun syncContent(newContent: String) {
+        if (newContent != textFieldValue.text) {
+            textFieldValue = textFieldValue.copy(text = newContent)
+        }
+    }
+
+    fun closeDrawer() = scope.launch { drawerState.close() }
+
+    fun toggleDrawer() = scope.launch {
+        if (drawerState.isClosed) drawerState.open() else drawerState.close()
+    }
+}
+
+@Composable
+fun rememberEditorScreenState(initialContent: String): EditorScreenState {
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    val markdownFormatter = remember { MarkdownFormatter() }
+    return remember { EditorScreenState(initialContent, drawerState, scope, markdownFormatter) }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun EditorScreen(
     uiState: NoteEditorUiState,
@@ -177,28 +223,22 @@ fun EditorScreen(
     onTabsClick: () -> Unit,
     onSwitchTab: (Int) -> Unit,
     onCloseTab: (Int) -> Unit,
-    onDismissTabGrid: () -> Unit
+    onDismissTabGrid: () -> Unit,
+    onTogglePrivacy: () -> Unit = {}
 ) {
-    val scope = rememberCoroutineScope()
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val textFieldValueState = remember { mutableStateOf(TextFieldValue(uiState.contentText)) }
+    val state = rememberEditorScreenState(uiState.contentText)
+    val isKeyboardVisible = WindowInsets.isImeVisible
 
     LaunchedEffect(uiState.contentText) {
-        if (uiState.contentText != textFieldValueState.value.text) {
-            textFieldValueState.value = textFieldValueState.value.copy(text = uiState.contentText)
-        }
+        state.syncContent(uiState.contentText)
     }
 
-    val markdownTransformation = remember(textFieldValueState.value.selection) {
+    val markdownTransformation = remember(state.textFieldValue.selection) {
         MarkdownVisualTransformation(
             listOf(BoldRule(), ItalicRule(), HeaderRule()),
-            cursorPosition = textFieldValueState.value.selection.start
+            cursorPosition = state.textFieldValue.selection.start
         )
     }
-
-    val markdownFormatter = remember { MarkdownFormatter() }
-    @OptIn(ExperimentalLayoutApi::class)
-    val isKeyboardVisible = WindowInsets.isImeVisible
 
     Box(modifier = Modifier.fillMaxSize()) {
         ModalNavigationDrawer(
@@ -207,13 +247,13 @@ fun EditorScreen(
                     notes = uiState.notes,
                     currentNoteId = uiState.noteId,
                     onNoteSelected = { note ->
-                        scope.launch { drawerState.close() }
+                        state.closeDrawer()
                         onNoteSelected(note)
                     },
-                    onClose = { scope.launch { drawerState.close() } }
+                    onClose = { state.closeDrawer() }
                 )
             },
-            drawerState = drawerState
+            drawerState = state.drawerState
         ) {
             Scaffold(
                 topBar = {
@@ -222,26 +262,23 @@ fun EditorScreen(
                         canUndo = uiState.canUndo,
                         canRedo = uiState.canRedo,
                         isSaving = uiState.isSaving,
+                        isPrivate = uiState.isPrivate,
                         onTitleChange = onTitleChange,
                         onUndo = onUndo,
                         onRedo = onRedo,
                         onSaveNote = onSaveNote,
-                        onNavigationClick = {
-                            scope.launch {
-                                if (drawerState.isClosed) drawerState.open()
-                                else drawerState.close()
-                            }
-                        }
+                        onTogglePrivacy = onTogglePrivacy,
+                        onNavigationClick = { state.toggleDrawer() }
                     )
                 },
                 bottomBar = {
                     EditorBottomBar(
                         isKeyboardVisible = isKeyboardVisible,
                         tabCount = uiState.tabCount,
-                        textFieldValue = textFieldValueState.value,
-                        markdownFormatter = markdownFormatter,
+                        textFieldValue = state.textFieldValue,
+                        markdownFormatter = state.markdownFormatter,
                         onContentChange = { newValue ->
-                            textFieldValueState.value = newValue
+                            state.onTextFieldValueChange(newValue)
                             onContentChange(newValue)
                         },
                         onNewTab = onNewTab,
@@ -249,18 +286,16 @@ fun EditorScreen(
                     )
                 }
             ) { paddingValues ->
-                NoteContentTextField(
-                    value = textFieldValueState.value,
+                EditorContent(
+                    paddingValues = paddingValues,
+                    isPrivate = uiState.isPrivate,
+                    textFieldValue = state.textFieldValue,
                     markdownTransformation = markdownTransformation,
                     onValueChange = { newValue ->
-                        val processedValue = markdownFormatter.processInput(newValue, textFieldValueState.value)
-                        textFieldValueState.value = processedValue
-                        onContentChange(processedValue)
-                    },
-                    modifier = Modifier
-                        .padding(paddingValues)
-                        .fillMaxSize()
-                        .padding(16.dp)
+                        val processed = state.markdownFormatter.processInput(newValue, state.textFieldValue)
+                        state.onTextFieldValueChange(processed)
+                        onContentChange(processed)
+                    }
                 )
             }
         }
@@ -277,6 +312,50 @@ fun EditorScreen(
                 onCloseTab = onCloseTab,
                 onNewTab = onNewTab,
                 onDone = onDismissTabGrid
+            )
+        }
+    }
+}
+
+@Composable
+private fun EditorContent(
+    paddingValues: PaddingValues,
+    isPrivate: Boolean,
+    textFieldValue: TextFieldValue,
+    markdownTransformation: MarkdownVisualTransformation,
+    onValueChange: (TextFieldValue) -> Unit
+) {
+    val blurRadius by animateDpAsState(
+        targetValue = if (isPrivate) 12.dp else 0.dp,
+        animationSpec = tween(200),
+        label = "privacyBlur"
+    )
+    Box(
+        modifier = Modifier
+            .padding(paddingValues)
+            .fillMaxSize()
+    ) {
+        NoteContentTextField(
+            value = textFieldValue,
+            markdownTransformation = markdownTransformation,
+            onValueChange = onValueChange,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .blur(blurRadius)
+        )
+        if (isPrivate) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                awaitPointerEvent(PointerEventPass.Initial)
+                                    .changes.forEach { it.consume() }
+                            }
+                        }
+                    }
             )
         }
     }
@@ -323,67 +402,27 @@ private fun EditorTopBar(
     canUndo: Boolean,
     canRedo: Boolean,
     isSaving: Boolean,
+    isPrivate: Boolean,
     onTitleChange: (String) -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onSaveNote: () -> Unit,
+    onTogglePrivacy: () -> Unit,
     onNavigationClick: () -> Unit
 ) {
     TopAppBar(
-        title = {
-            TextField(
-                value = title,
-                onValueChange = onTitleChange,
-                modifier = Modifier.fillMaxWidth(),
-                textStyle = MaterialTheme.typography.headlineSmall,
-                placeholder = {
-                    Text(
-                        "Untitled Note",
-                        style = MaterialTheme.typography.headlineSmall
-                    )
-                },
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                ),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Sentences,
-                    autoCorrect = false,
-                    imeAction = ImeAction.Next
-                )
-            )
-        },
+        title = { EditorTitleField(title = title, onTitleChange = onTitleChange) },
         actions = {
-            IconButton(onClick = onUndo, enabled = canUndo) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Undo,
-                    contentDescription = "Undo",
-                    tint = if (canUndo) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f)
-                )
-            }
-            IconButton(onClick = onRedo, enabled = canRedo) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Redo,
-                    contentDescription = "Redo",
-                    tint = if (canRedo) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f)
-                )
-            }
-            IconButton(onClick = onSaveNote, enabled = !isSaving) {
-                if (isSaving) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.Save,
-                        contentDescription = "Save note"
-                    )
-                }
-            }
+            EditorActionButtons(
+                canUndo = canUndo,
+                canRedo = canRedo,
+                isSaving = isSaving,
+                isPrivate = isPrivate,
+                onUndo = onUndo,
+                onRedo = onRedo,
+                onSaveNote = onSaveNote,
+                onTogglePrivacy = onTogglePrivacy
+            )
         },
         navigationIcon = {
             IconButton(onClick = onNavigationClick) {
@@ -394,6 +433,74 @@ private fun EditorTopBar(
             }
         }
     )
+}
+
+@Composable
+private fun EditorTitleField(
+    title: String,
+    onTitleChange: (String) -> Unit
+) {
+    TextField(
+        value = title,
+        onValueChange = onTitleChange,
+        modifier = Modifier.fillMaxWidth(),
+        textStyle = MaterialTheme.typography.headlineSmall,
+        placeholder = {
+            Text("Untitled Note", style = MaterialTheme.typography.headlineSmall)
+        },
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = Color.Transparent,
+            unfocusedContainerColor = Color.Transparent,
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+        ),
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(
+            capitalization = KeyboardCapitalization.Sentences,
+            autoCorrect = false,
+            imeAction = ImeAction.Next
+        )
+    )
+}
+
+@Composable
+private fun EditorActionButtons(
+    canUndo: Boolean,
+    canRedo: Boolean,
+    isSaving: Boolean,
+    isPrivate: Boolean,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onSaveNote: () -> Unit,
+    onTogglePrivacy: () -> Unit
+) {
+    IconButton(onClick = onTogglePrivacy) {
+        Icon(
+            imageVector = if (isPrivate) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+            contentDescription = if (isPrivate) "Show note" else "Hide note"
+        )
+    }
+    IconButton(onClick = onUndo, enabled = canUndo) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.Undo,
+            contentDescription = "Undo",
+            tint = if (canUndo) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f)
+        )
+    }
+    IconButton(onClick = onRedo, enabled = canRedo) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.Redo,
+            contentDescription = "Redo",
+            tint = if (canRedo) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f)
+        )
+    }
+    IconButton(onClick = onSaveNote, enabled = !isSaving) {
+        if (isSaving) {
+            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+        } else {
+            Icon(imageVector = Icons.Default.Save, contentDescription = "Save note")
+        }
+    }
 }
 
 @Composable

@@ -5,7 +5,8 @@ import id.project.df.dnote.feature.note.domain.model.Note
 data class TabState(
     val noteId: String? = null,
     val title: String = "",
-    val contentText: String = ""
+    val contentText: String = "",
+    val isPrivate: Boolean = false
 )
 
 data class NoteEditorUiState(
@@ -22,6 +23,7 @@ data class NoteEditorUiState(
     val noteId: String? get() = activeTab.noteId
     val title: String get() = activeTab.title
     val contentText: String get() = activeTab.contentText
+    val isPrivate: Boolean get() = activeTab.isPrivate
     val tabCount: Int get() = tabs.size
 }
 

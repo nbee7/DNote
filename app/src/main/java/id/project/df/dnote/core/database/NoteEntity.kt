@@ -17,5 +17,6 @@ data class NoteEntity(
     val content: String,
     val createdAt: Long,
     val updatedAt: Long,
-    val deletedAt: Long? = null
+    val deletedAt: Long? = null,
+    val isPrivate: Boolean = false
 )

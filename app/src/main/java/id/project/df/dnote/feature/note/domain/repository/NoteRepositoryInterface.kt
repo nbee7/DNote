@@ -9,4 +9,6 @@ interface NoteRepositoryInterface {
     fun getNote(id: String): Flow<Result<Note>>
     suspend fun create(title: String, content: String): String
     suspend fun update(id: String, title: String, content: String)
-    suspend fun delete(id: String)}
+    suspend fun delete(id: String)
+    suspend fun togglePrivacy(id: String, isPrivate: Boolean)
+}

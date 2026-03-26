@@ -58,4 +58,8 @@ class NotesRepositoryImpl @Inject constructor(
     override suspend fun delete(id: String) {
         dao.softDelete(id = id, deletedAt = timeProvider.nowMillis())
     }
+
+    override suspend fun togglePrivacy(id: String, isPrivate: Boolean) {
+        dao.updatePrivacy(id = id, isPrivate = isPrivate)
+    }
 }
