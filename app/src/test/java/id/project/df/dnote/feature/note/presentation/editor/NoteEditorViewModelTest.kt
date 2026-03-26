@@ -8,6 +8,7 @@ import id.project.df.dnote.feature.note.di.NoteEditor
 import id.project.df.dnote.feature.note.domain.model.Note
 import id.project.df.dnote.feature.note.domain.repository.NoteRepositoryInterface
 import id.project.df.dnote.feature.note.domain.usecase.DeleteNoteUseCase
+import id.project.df.dnote.feature.note.domain.usecase.ToggleNotePrivacyUseCase
 import id.project.df.dnote.feature.note.domain.usecase.UpsertNoteUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -33,6 +34,7 @@ class NoteEditorViewModelTest {
     private val deleteNote: DeleteNoteUseCase = mockk(relaxed = true)
     private val repo: NoteRepositoryInterface = mockk(relaxed = true)
     private val sessionRepo: SessionRepository = mockk(relaxed = true)
+    private val toggleNotePrivacy: ToggleNotePrivacyUseCase = mockk(relaxed = true)
 
     private lateinit var viewModel: NoteEditorViewModel
 
@@ -42,7 +44,7 @@ class NoteEditorViewModelTest {
         val note = Note(noteId, "Title", "Content", 0L, 0L)
         coEvery { repo.getNote(noteId) } returns flowOf(Result.Success(note))
 
-        viewModel = NoteEditorViewModel(NoteEditor(noteId), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(noteId), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
         runCurrent()
 
         assertEquals(noteId, viewModel.uiState.value.noteId)
@@ -52,7 +54,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `onContentChanged_updatesState_and_schedulesAutosave`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         viewModel.onContentChanged("New Content")
         assertEquals("New Content", viewModel.uiState.value.contentText)
@@ -64,7 +66,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `undo_restoresPreviousState`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         viewModel.onContentChanged("A")
         advanceTimeBy(601)
@@ -79,7 +81,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `redo_restoresUndoneState`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         viewModel.onContentChanged("A")
         advanceTimeBy(702)
@@ -102,7 +104,7 @@ class NoteEditorViewModelTest {
         val noteId = "123"
         coEvery { repo.getNote(noteId) } returns flowOf(Result.Success(Note(noteId, "T", "C", 0, 0)))
         
-        viewModel = NoteEditorViewModel(NoteEditor(noteId), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(noteId), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
         runCurrent()
         
         viewModel.onTitleChanged("")
@@ -118,7 +120,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `saveInternal_emptyContent_skipsUpsertForNewNote`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
         
         viewModel.onTitleChanged("")
         viewModel.onContentChanged("")
@@ -133,7 +135,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `onCloseRequested_emitsCloseEventOnSuccess`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
         viewModel.onContentChanged("Save Me")
 
         viewModel.events.test {
@@ -146,7 +148,7 @@ class NoteEditorViewModelTest {
     fun `saveInternal_failure_updatesState`() = runTest {
         coEvery { upsertNote(any(), any(), any()) } throws RuntimeException("Fail")
 
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
         viewModel.onContentChanged("Content")
 
         viewModel.onCloseRequested()
@@ -159,7 +161,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `onNewTab_addsTabAndSwitchesToIt`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         viewModel.onNewTab()
         runCurrent()
@@ -173,7 +175,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `onNewTab_savesCurrentTabBeforeSwitching`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         viewModel.onContentChanged("Draft")
         viewModel.onNewTab()
@@ -184,7 +186,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `onNewTab_preservesPreviousTabContent`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         viewModel.onContentChanged("Tab0 Content")
         viewModel.onNewTab()
@@ -198,7 +200,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `onSwitchTab_changesToTargetTab`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         viewModel.onContentChanged("First")
         viewModel.onNewTab()
@@ -217,7 +219,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `onSwitchTab_invalidIndex_noOp`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         viewModel.onSwitchTab(5)
         runCurrent()
@@ -228,7 +230,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `onSwitchTab_sameIndex_noOp`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         viewModel.onContentChanged("Content")
         viewModel.onSwitchTab(0)
@@ -240,7 +242,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `onNoteSelected_newNote_opensInNewTab`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         val note = Note("note1", "Selected", "Body", 0L, 0L)
         viewModel.onNoteSelected(note)
@@ -256,7 +258,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `onNoteSelected_existingTab_switchesToIt`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         val note = Note("note1", "Title", "Content", 0L, 0L)
         viewModel.onNoteSelected(note)
@@ -278,7 +280,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `tabCount_reflectsNumberOfOpenTabs`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         assertEquals(1, viewModel.uiState.value.tabCount)
 
@@ -295,7 +297,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `onCloseTab_removesTabAndAdjustsIndex`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         // Create 3 tabs: [0, 1, 2], active = 2
         viewModel.onNewTab()
@@ -315,7 +317,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `onCloseTab_activeTab_switchesToNearest`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         viewModel.onContentChanged("Tab0")
         viewModel.onNewTab()
@@ -333,7 +335,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `onCloseTab_lastTab_createsNewBlank`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         viewModel.onContentChanged("Something")
         viewModel.onCloseTab(0)
@@ -347,7 +349,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `onCloseTab_savesTabBeforeRemoving`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         // Open a note in a tab
         val note = Note("n1", "Title", "Body", 0L, 0L)
@@ -365,7 +367,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `onTabsClick_togglesShowTabGrid`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         assertFalse(viewModel.uiState.value.showTabGrid)
 
@@ -378,7 +380,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `onDismissTabGrid_hidesGrid`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         viewModel.onTabsClick()
         assertTrue(viewModel.uiState.value.showTabGrid)
@@ -389,7 +391,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `onNewTab_dismissesTabGrid`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         viewModel.onTabsClick()
         assertTrue(viewModel.uiState.value.showTabGrid)
@@ -401,7 +403,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `onSwitchTab_dismissesTabGrid`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         viewModel.onNewTab()
         runCurrent()
@@ -427,7 +429,7 @@ class NoteEditorViewModelTest {
         coEvery { repo.getNote("id1") } returns flowOf(Result.Success(note1))
         coEvery { repo.getNote("id2") } returns flowOf(Result.Success(note2))
 
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
         runCurrent()
 
         val state = viewModel.uiState.value
@@ -450,7 +452,7 @@ class NoteEditorViewModelTest {
         coEvery { repo.getNote("id2") } returns flowOf(Result.Success(note2))
         coEvery { repo.getNote("id3") } returns flowOf(Result.Success(note3))
 
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
         runCurrent()
 
         assertEquals(2, viewModel.uiState.value.activeTabIndex)
@@ -461,7 +463,7 @@ class NoteEditorViewModelTest {
     fun `init_noSession_startsBlank`() = runTest {
         coEvery { sessionRepo.getSession() } returns null
 
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
         runCurrent()
 
         assertEquals(1, viewModel.uiState.value.tabCount)
@@ -471,7 +473,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `onNewTab_savesSession`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         // First select a note so there's a noteId to persist
         val note = Note("n1", "T", "C", 0L, 0L)
@@ -486,7 +488,7 @@ class NoteEditorViewModelTest {
 
     @Test
     fun `onCloseTab_savesSession`() = runTest {
-        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo)
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
 
         val note = Note("n1", "T", "C", 0L, 0L)
         viewModel.onNoteSelected(note)
@@ -496,5 +498,84 @@ class NoteEditorViewModelTest {
         runCurrent()
 
         coVerify(atLeast = 1) { sessionRepo.saveSession(any(), any()) }
+    }
+
+    // --- Privacy tests ---
+
+    @Test
+    fun `onTogglePrivacy_whenNoteLoaded_setsIsPrivateTrueAndCallsUseCase`() = runTest {
+        val noteId = "123"
+        coEvery { repo.getNote(noteId) } returns flowOf(Result.Success(Note(noteId, "T", "C", 0L, 0L, isPrivate = false)))
+
+        viewModel = NoteEditorViewModel(NoteEditor(noteId), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
+        runCurrent()
+
+        viewModel.onTogglePrivacy()
+        runCurrent()
+
+        assertTrue(viewModel.uiState.value.isPrivate)
+        coVerify { toggleNotePrivacy(noteId, true) }
+    }
+
+    @Test
+    fun `onTogglePrivacy_whenAlreadyPrivate_setsIsPrivateFalseAndCallsUseCase`() = runTest {
+        val noteId = "123"
+        coEvery { repo.getNote(noteId) } returns flowOf(Result.Success(Note(noteId, "T", "C", 0L, 0L, isPrivate = true)))
+
+        viewModel = NoteEditorViewModel(NoteEditor(noteId), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
+        runCurrent()
+
+        viewModel.onTogglePrivacy()
+        runCurrent()
+
+        assertFalse(viewModel.uiState.value.isPrivate)
+        coVerify { toggleNotePrivacy(noteId, false) }
+    }
+
+    @Test
+    fun `onTogglePrivacy_whenNoNoteId_doesNothing`() = runTest {
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
+
+        viewModel.onTogglePrivacy()
+        runCurrent()
+
+        assertFalse(viewModel.uiState.value.isPrivate)
+        coVerify(exactly = 0) { toggleNotePrivacy(any(), any()) }
+    }
+
+    @Test
+    fun `init_withNavKey_loadsNoteIsPrivate`() = runTest {
+        val noteId = "123"
+        coEvery { repo.getNote(noteId) } returns flowOf(Result.Success(Note(noteId, "T", "C", 0L, 0L, isPrivate = true)))
+
+        viewModel = NoteEditorViewModel(NoteEditor(noteId), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
+        runCurrent()
+
+        assertTrue(viewModel.uiState.value.isPrivate)
+    }
+
+    @Test
+    fun `onNoteSelected_opensTabWithIsPrivate`() = runTest {
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
+
+        val note = Note("n1", "Title", "Body", 0L, 0L, isPrivate = true)
+        viewModel.onNoteSelected(note)
+        runCurrent()
+
+        assertTrue(viewModel.uiState.value.isPrivate)
+    }
+
+    @Test
+    fun `init_withSession_restoresIsPrivate`() = runTest {
+        coEvery { sessionRepo.getSession() } returns id.project.df.dnote.core.data.SessionData(
+            noteIds = listOf("id1"),
+            activeTabIndex = 0
+        )
+        coEvery { repo.getNote("id1") } returns flowOf(Result.Success(Note("id1", "T", "C", 0L, 0L, isPrivate = true)))
+
+        viewModel = NoteEditorViewModel(NoteEditor(null), upsertNote, deleteNote, repo, sessionRepo, toggleNotePrivacy)
+        runCurrent()
+
+        assertTrue(viewModel.uiState.value.isPrivate)
     }
 }

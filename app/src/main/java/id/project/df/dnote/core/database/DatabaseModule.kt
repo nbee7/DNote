@@ -16,6 +16,7 @@ object DatabaseModule {
     @Provides @Singleton
     fun provideDb(@ApplicationContext context: Context): NoteDatabase =
         Room.databaseBuilder(context, NoteDatabase::class.java, "notes.db")
+            .addMigrations(NoteDatabase.MIGRATION_1_2)
             .fallbackToDestructiveMigration(false)
             .build()
 

@@ -11,8 +11,9 @@ import id.project.df.dnote.feature.note.data.repository.Result
 import id.project.df.dnote.feature.note.di.NoteEditor
 import id.project.df.dnote.feature.note.domain.model.Note
 import id.project.df.dnote.feature.note.domain.repository.NoteRepositoryInterface
-import id.project.df.dnote.feature.note.domain.usecase.UpsertNoteUseCase
 import id.project.df.dnote.feature.note.domain.usecase.DeleteNoteUseCase
+import id.project.df.dnote.feature.note.domain.usecase.ToggleNotePrivacyUseCase
+import id.project.df.dnote.feature.note.domain.usecase.UpsertNoteUseCase
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -34,7 +35,8 @@ class NoteEditorViewModel @AssistedInject constructor(
     @Assisted private val upsertNote: UpsertNoteUseCase,
     @Assisted private val deleteNote: DeleteNoteUseCase,
     @Assisted private val repo: NoteRepositoryInterface,
-    private val sessionRepository: SessionRepository
+    private val sessionRepository: SessionRepository,
+    private val toggleNotePrivacy: ToggleNotePrivacyUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(NoteEditorUiState())
@@ -66,7 +68,7 @@ class NoteEditorViewModel @AssistedInject constructor(
             viewModelScope.launch {
                 repo.getNote(navKey.id).collect { result ->
                     when (result) {
-                        is Result.Success -> loadExisting(navKey.id, result.data.title, result.data.content, null)
+                        is Result.Success -> loadExisting(navKey.id, result.data.title, result.data.content, isPrivate = result.data.isPrivate)
                         is Result.Error -> loadExisting(navKey.id, errorMessage = result.exception.message.toString())
                     }
                 }
@@ -84,7 +86,7 @@ class NoteEditorViewModel @AssistedInject constructor(
         for (noteId in session.noteIds) {
             val result = repo.getNote(noteId).first()
             if (result is Result.Success) {
-                tabs.add(TabState(noteId = noteId, title = result.data.title, contentText = result.data.content))
+                tabs.add(TabState(noteId = noteId, title = result.data.title, contentText = result.data.content, isPrivate = result.data.isPrivate))
             }
         }
         if (tabs.isEmpty()) return
@@ -171,7 +173,7 @@ class NoteEditorViewModel @AssistedInject constructor(
             saveInternal(flush = true)
             resetUndoRedo()
             _uiState.update { s ->
-                val newTab = TabState(noteId = note.id, title = note.title, contentText = note.content)
+                val newTab = TabState(noteId = note.id, title = note.title, contentText = note.content, isPrivate = note.isPrivate)
                 val newTabs = s.tabs + newTab
                 s.copy(
                     tabs = newTabs,
@@ -187,9 +189,9 @@ class NoteEditorViewModel @AssistedInject constructor(
 
     // --- Editor operations (operate on active tab) ---
 
-    fun loadExisting(noteId: String, title: String = "", initialText: String = "", errorMessage: String? = null) {
+    fun loadExisting(noteId: String, title: String = "", initialText: String = "", errorMessage: String? = null, isPrivate: Boolean = false) {
         _uiState.update { state ->
-            val updatedTab = state.activeTab.copy(noteId = noteId, title = title, contentText = initialText)
+            val updatedTab = state.activeTab.copy(noteId = noteId, title = title, contentText = initialText, isPrivate = isPrivate)
             val updatedTabs = state.tabs.toMutableList().apply { set(state.activeTabIndex, updatedTab) }
             state.copy(
                 tabs = updatedTabs,
@@ -339,6 +341,20 @@ class NoteEditorViewModel @AssistedInject constructor(
         autosaveJob = viewModelScope.launch {
             delay(400)
             saveInternal(flush = false)
+        }
+    }
+
+    fun onTogglePrivacy() {
+        val tab = _uiState.value.activeTab
+        val noteId = tab.noteId ?: return
+        val newValue = !tab.isPrivate
+        _uiState.update { s ->
+            val tabs = s.tabs.toMutableList()
+            tabs[s.activeTabIndex] = tabs[s.activeTabIndex].copy(isPrivate = newValue)
+            s.copy(tabs = tabs)
+        }
+        viewModelScope.launch {
+            toggleNotePrivacy(noteId, newValue)
         }
     }
 
