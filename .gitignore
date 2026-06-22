@@ -7,3 +7,6 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Keystore — JANGAN pernah commit file ini ke repo
+keystore/

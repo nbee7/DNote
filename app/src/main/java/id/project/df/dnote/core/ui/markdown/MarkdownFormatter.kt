@@ -19,8 +19,8 @@ class MarkdownFormatter {
 
         val match = headerRule.pattern.find(lineContent)
         
-        var newText = text
-        var newSelection = selection
+        val newText: String
+        val newSelection: TextRange
 
         if (match != null) {
             val hashes = match.groupValues[1]

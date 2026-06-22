@@ -154,24 +154,26 @@ fun NoteEditorRoute(
             is NoteEditorEvent.ShowError -> {
                 Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
             }
-            else -> {}
+            else -> { /* no-op */ }
         }
     }
 
     EditorScreen(
         uiState = uiState,
-        onTitleChange = { newText -> viewModel.onTitleChanged(newText) },
-        onContentChange = { newValue -> viewModel.onContentChanged(newValue.text) },
-        onSaveNote = { viewModel.onCloseRequested() },
-        onUndo = { viewModel.onUndo() },
-        onRedo = { viewModel.onRedo() },
-        onNoteSelected = { note -> viewModel.onNoteSelected(note) },
-        onNewTab = { viewModel.onNewTab() },
-        onTabsClick = { viewModel.onTabsClick() },
-        onSwitchTab = { index -> viewModel.onSwitchTab(index) },
-        onCloseTab = { index -> viewModel.onCloseTab(index) },
-        onDismissTabGrid = { viewModel.onDismissTabGrid() },
-        onTogglePrivacy = { viewModel.onTogglePrivacy() }
+        callbacks = EditorCallbacks(
+            onTitleChange = { newText -> viewModel.onTitleChanged(newText) },
+            onContentChange = { newValue -> viewModel.onContentChanged(newValue.text) },
+            onSaveNote = { viewModel.onCloseRequested() },
+            onUndo = { viewModel.onUndo() },
+            onRedo = { viewModel.onRedo() },
+            onNoteSelected = { note -> viewModel.onNoteSelected(note) },
+            onNewTab = { viewModel.onNewTab() },
+            onTabsClick = { viewModel.onTabsClick() },
+            onSwitchTab = { index -> viewModel.onSwitchTab(index) },
+            onCloseTab = { index -> viewModel.onCloseTab(index) },
+            onDismissTabGrid = { viewModel.onDismissTabGrid() },
+            onTogglePrivacy = { viewModel.onTogglePrivacy() }
+        )
     )
 }
 
@@ -209,22 +211,26 @@ fun rememberEditorScreenState(initialContent: String): EditorScreenState {
     return remember { EditorScreenState(initialContent, drawerState, scope, markdownFormatter) }
 }
 
+data class EditorCallbacks(
+    val onTitleChange: (String) -> Unit,
+    val onContentChange: (TextFieldValue) -> Unit,
+    val onSaveNote: () -> Unit,
+    val onUndo: () -> Unit,
+    val onRedo: () -> Unit,
+    val onNoteSelected: (Note) -> Unit,
+    val onNewTab: () -> Unit,
+    val onTabsClick: () -> Unit,
+    val onSwitchTab: (Int) -> Unit,
+    val onCloseTab: (Int) -> Unit,
+    val onDismissTabGrid: () -> Unit,
+    val onTogglePrivacy: () -> Unit = {}
+)
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun EditorScreen(
     uiState: NoteEditorUiState,
-    onTitleChange: (String) -> Unit,
-    onContentChange: (TextFieldValue) -> Unit,
-    onSaveNote: () -> Unit,
-    onUndo: () -> Unit,
-    onRedo: () -> Unit,
-    onNoteSelected: (Note) -> Unit,
-    onNewTab: () -> Unit,
-    onTabsClick: () -> Unit,
-    onSwitchTab: (Int) -> Unit,
-    onCloseTab: (Int) -> Unit,
-    onDismissTabGrid: () -> Unit,
-    onTogglePrivacy: () -> Unit = {}
+    callbacks: EditorCallbacks
 ) {
     val state = rememberEditorScreenState(uiState.contentText)
     val isKeyboardVisible = WindowInsets.isImeVisible
@@ -248,9 +254,8 @@ fun EditorScreen(
                     currentNoteId = uiState.noteId,
                     onNoteSelected = { note ->
                         state.closeDrawer()
-                        onNoteSelected(note)
-                    },
-                    onClose = { state.closeDrawer() }
+                        callbacks.onNoteSelected(note)
+                    }
                 )
             },
             drawerState = state.drawerState
@@ -258,16 +263,12 @@ fun EditorScreen(
             Scaffold(
                 topBar = {
                     EditorTopBar(
-                        title = uiState.title,
-                        canUndo = uiState.canUndo,
-                        canRedo = uiState.canRedo,
-                        isSaving = uiState.isSaving,
-                        isPrivate = uiState.isPrivate,
-                        onTitleChange = onTitleChange,
-                        onUndo = onUndo,
-                        onRedo = onRedo,
-                        onSaveNote = onSaveNote,
-                        onTogglePrivacy = onTogglePrivacy,
+                        uiState = uiState,
+                        onTitleChange = callbacks.onTitleChange,
+                        onUndo = callbacks.onUndo,
+                        onRedo = callbacks.onRedo,
+                        onSaveNote = callbacks.onSaveNote,
+                        onTogglePrivacy = callbacks.onTogglePrivacy,
                         onNavigationClick = { state.toggleDrawer() }
                     )
                 },
@@ -279,10 +280,10 @@ fun EditorScreen(
                         markdownFormatter = state.markdownFormatter,
                         onContentChange = { newValue ->
                             state.onTextFieldValueChange(newValue)
-                            onContentChange(newValue)
+                            callbacks.onContentChange(newValue)
                         },
-                        onNewTab = onNewTab,
-                        onTabsClick = onTabsClick
+                        onNewTab = callbacks.onNewTab,
+                        onTabsClick = callbacks.onTabsClick
                     )
                 }
             ) { paddingValues ->
@@ -294,7 +295,7 @@ fun EditorScreen(
                     onValueChange = { newValue ->
                         val processed = state.markdownFormatter.processInput(newValue, state.textFieldValue)
                         state.onTextFieldValueChange(processed)
-                        onContentChange(processed)
+                        callbacks.onContentChange(processed)
                     }
                 )
             }
@@ -308,10 +309,10 @@ fun EditorScreen(
             TabGridOverlay(
                 tabs = uiState.tabs,
                 activeTabIndex = uiState.activeTabIndex,
-                onSwitchTab = onSwitchTab,
-                onCloseTab = onCloseTab,
-                onNewTab = onNewTab,
-                onDone = onDismissTabGrid
+                onSwitchTab = callbacks.onSwitchTab,
+                onCloseTab = callbacks.onCloseTab,
+                onNewTab = callbacks.onNewTab,
+                onDone = callbacks.onDismissTabGrid
             )
         }
     }
@@ -365,8 +366,7 @@ private fun EditorContent(
 private fun EditorDrawerContent(
     notes: List<Note>,
     currentNoteId: String?,
-    onNoteSelected: (Note) -> Unit,
-    onClose: () -> Unit
+    onNoteSelected: (Note) -> Unit
 ) {
     ModalDrawerSheet {
         Text(
@@ -398,11 +398,7 @@ private fun EditorDrawerContent(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EditorTopBar(
-    title: String,
-    canUndo: Boolean,
-    canRedo: Boolean,
-    isSaving: Boolean,
-    isPrivate: Boolean,
+    uiState: NoteEditorUiState,
     onTitleChange: (String) -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
@@ -411,13 +407,10 @@ private fun EditorTopBar(
     onNavigationClick: () -> Unit
 ) {
     TopAppBar(
-        title = { EditorTitleField(title = title, onTitleChange = onTitleChange) },
+        title = { EditorTitleField(title = uiState.title, onTitleChange = onTitleChange) },
         actions = {
             EditorActionButtons(
-                canUndo = canUndo,
-                canRedo = canRedo,
-                isSaving = isSaving,
-                isPrivate = isPrivate,
+                uiState = uiState,
                 onUndo = onUndo,
                 onRedo = onRedo,
                 onSaveNote = onSaveNote,
@@ -465,10 +458,7 @@ private fun EditorTitleField(
 
 @Composable
 private fun EditorActionButtons(
-    canUndo: Boolean,
-    canRedo: Boolean,
-    isSaving: Boolean,
-    isPrivate: Boolean,
+    uiState: NoteEditorUiState,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onSaveNote: () -> Unit,
@@ -476,26 +466,26 @@ private fun EditorActionButtons(
 ) {
     IconButton(onClick = onTogglePrivacy) {
         Icon(
-            imageVector = if (isPrivate) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-            contentDescription = if (isPrivate) "Show note" else "Hide note"
+            imageVector = if (uiState.isPrivate) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+            contentDescription = if (uiState.isPrivate) "Show note" else "Hide note"
         )
     }
-    IconButton(onClick = onUndo, enabled = canUndo) {
+    IconButton(onClick = onUndo, enabled = uiState.canUndo) {
         Icon(
             imageVector = Icons.AutoMirrored.Filled.Undo,
             contentDescription = "Undo",
-            tint = if (canUndo) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f)
+            tint = if (uiState.canUndo) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f)
         )
     }
-    IconButton(onClick = onRedo, enabled = canRedo) {
+    IconButton(onClick = onRedo, enabled = uiState.canRedo) {
         Icon(
             imageVector = Icons.AutoMirrored.Filled.Redo,
             contentDescription = "Redo",
-            tint = if (canRedo) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f)
+            tint = if (uiState.canRedo) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f)
         )
     }
-    IconButton(onClick = onSaveNote, enabled = !isSaving) {
-        if (isSaving) {
+    IconButton(onClick = onSaveNote, enabled = !uiState.isSaving) {
+        if (uiState.isSaving) {
             CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
         } else {
             Icon(imageVector = Icons.Default.Save, contentDescription = "Save note")
@@ -569,21 +559,252 @@ private fun NoteContentTextField(
 
 @Preview(showBackground = true)
 @Composable
+private fun DrawerNoteItemPreview() {
+    DNoteTheme {
+        DrawerNoteItem(
+            note = Note(
+                id = "1",
+                title = "My Sample Note",
+                content = "Some content here",
+                createdAt = System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis(),
+                isPrivate = false
+            ),
+            isSelected = false,
+            onClick = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun DrawerNoteItemSelectedPreview() {
+    DNoteTheme {
+        DrawerNoteItem(
+            note = Note(
+                id = "2",
+                title = "Selected Note",
+                content = "",
+                createdAt = System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis(),
+                isPrivate = false
+            ),
+            isSelected = true,
+            onClick = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun DrawerNoteItemPrivatePreview() {
+    DNoteTheme {
+        DrawerNoteItem(
+            note = Note(
+                id = "3",
+                title = "Private Note",
+                content = "Hidden content",
+                createdAt = System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis(),
+                isPrivate = true
+            ),
+            isSelected = false,
+            onClick = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun EditorDrawerContentPreview() {
+    DNoteTheme {
+        EditorDrawerContent(
+            notes = listOf(
+                Note("1", "First Note", "Content 1", System.currentTimeMillis(), System.currentTimeMillis(), isPrivate = false),
+                Note("2", "Second Note", "Content 2", System.currentTimeMillis(), System.currentTimeMillis(), isPrivate = false),
+                Note("3", "Private Note", "Hidden", System.currentTimeMillis(), System.currentTimeMillis(), isPrivate = true),
+                Note("4", "", "No title note", System.currentTimeMillis(), System.currentTimeMillis(), isPrivate = false),
+            ),
+            currentNoteId = "1",
+            onNoteSelected = {}
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Preview(showBackground = true)
+@Composable
+private fun EditorTopBarPreview() {
+    DNoteTheme {
+        EditorTopBar(
+            uiState = NoteEditorUiState(
+                tabs = listOf(TabState(title = "My Note")),
+                canUndo = true,
+                canRedo = false
+            ),
+            onTitleChange = {},
+            onUndo = {},
+            onRedo = {},
+            onSaveNote = {},
+            onTogglePrivacy = {},
+            onNavigationClick = {}
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Preview(showBackground = true)
+@Composable
+private fun EditorTopBarPrivatePreview() {
+    DNoteTheme {
+        EditorTopBar(
+            uiState = NoteEditorUiState(
+                tabs = listOf(TabState(title = "Private Note", isPrivate = true)),
+                canUndo = false,
+                canRedo = false,
+                isSaving = true
+            ),
+            onTitleChange = {},
+            onUndo = {},
+            onRedo = {},
+            onSaveNote = {},
+            onTogglePrivacy = {},
+            onNavigationClick = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun EditorTitleFieldPreview() {
+    DNoteTheme {
+        EditorTitleField(
+            title = "My Sample Note",
+            onTitleChange = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun EditorTitleFieldEmptyPreview() {
+    DNoteTheme {
+        EditorTitleField(
+            title = "",
+            onTitleChange = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun EditorActionButtonsPreview() {
+    DNoteTheme {
+        Surface {
+            Row {
+                EditorActionButtons(
+                    uiState = NoteEditorUiState(canUndo = true, canRedo = false),
+                    onUndo = {},
+                    onRedo = {},
+                    onSaveNote = {},
+                    onTogglePrivacy = {}
+                )
+            }
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun EditorActionButtonsSavingPreview() {
+    DNoteTheme {
+        Surface {
+            Row {
+                EditorActionButtons(
+                    uiState = NoteEditorUiState(isSaving = true),
+                    onUndo = {},
+                    onRedo = {},
+                    onSaveNote = {},
+                    onTogglePrivacy = {}
+                )
+            }
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun EditorContentPreview() {
+    DNoteTheme {
+        EditorContent(
+            paddingValues = PaddingValues(0.dp),
+            isPrivate = false,
+            textFieldValue = TextFieldValue("This is some sample note content.\n\nWith multiple paragraphs."),
+            markdownTransformation = MarkdownVisualTransformation(
+                listOf(BoldRule(), ItalicRule(), HeaderRule()),
+                cursorPosition = 0
+            ),
+            onValueChange = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun EditorContentPrivatePreview() {
+    DNoteTheme {
+        EditorContent(
+            paddingValues = PaddingValues(0.dp),
+            isPrivate = true,
+            textFieldValue = TextFieldValue("This content is blurred."),
+            markdownTransformation = MarkdownVisualTransformation(
+                listOf(BoldRule(), ItalicRule(), HeaderRule()),
+                cursorPosition = 0
+            ),
+            onValueChange = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun TabGridOverlayPreview() {
+    DNoteTheme {
+        TabGridOverlay(
+            tabs = listOf(
+                TabState(title = "First Note", contentText = "Content of the first note goes here."),
+                TabState(title = "Second Note", contentText = "Content of the second note."),
+                TabState(title = "", contentText = "Note without a title"),
+                TabState(title = "Private Note", contentText = "Hidden content", isPrivate = true),
+            ),
+            activeTabIndex = 0,
+            onSwitchTab = {},
+            onCloseTab = {},
+            onNewTab = {},
+            onDone = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
 fun EditorScreenPreview() {
     DNoteTheme {
         EditorScreen(
             uiState = NoteEditorUiState(),
-            onContentChange = {},
-            onSaveNote = {},
-            onTitleChange = {},
-            onUndo = {},
-            onRedo = {},
-            onNoteSelected = {},
-            onNewTab = {},
-            onTabsClick = {},
-            onSwitchTab = {},
-            onCloseTab = {},
-            onDismissTabGrid = {}
+            callbacks = EditorCallbacks(
+                onContentChange = {},
+                onSaveNote = {},
+                onTitleChange = {},
+                onUndo = {},
+                onRedo = {},
+                onNoteSelected = {},
+                onNewTab = {},
+                onTabsClick = {},
+                onSwitchTab = {},
+                onCloseTab = {},
+                onDismissTabGrid = {}
+            )
         )
     }
 }

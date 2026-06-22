@@ -24,6 +24,7 @@ import id.project.df.dnote.feature.note.presentation.list.NotesListViewModel
 import kotlinx.serialization.Serializable
 import javax.inject.Singleton
 
+@Suppress("kotlin:S6517") // @Module @Binds interface cannot be a fun interface; Dagger requires regular interface
 @Module
 @InstallIn(SingletonComponent::class)
 interface RepositoryModule {
